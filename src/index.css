@@ -1,0 +1,122 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+  code, kbd, samp, pre {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Print Media Styles - Precision Sizing to Prevent Clipping */
+@media print {
+  /* Hide non-print application UI */
+  aside,
+  header,
+  nav,
+  .no-print,
+  #welcomeHeroScreen,
+  button,
+  .modal-overlay {
+    display: none !important;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Specific Sheet for ID Card F4 (Folio: 215mm x 330mm) */
+  body.printing-idcard-f4 {
+    @page {
+      size: 215mm 330mm portrait;
+      margin: 0;
+    }
+  }
+
+  /* Specific Sheet for ID Card A4 (210mm x 297mm) */
+  body.printing-idcard-a4 {
+    @page {
+      size: 210mm 297mm portrait;
+      margin: 0;
+    }
+  }
+
+  /* Specific Sheet for Rekap Laporan A4 */
+  body.printing-rekap {
+    @page {
+      size: 210mm 297mm portrait;
+      margin: 8mm;
+    }
+  }
+
+  .id-card-page-f4 {
+    width: 215mm !important;
+    height: 330mm !important;
+    max-height: 330mm !important;
+    margin: 0 auto !important;
+    padding: 6mm 5mm !important;
+    box-sizing: border-box !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 65mm) !important;
+    grid-template-rows: repeat(3, 100mm) !important;
+    column-gap: 3mm !important;
+    row-gap: 3mm !important;
+    justify-content: center !important;
+    align-content: start !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .id-card-page-a4 {
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 auto !important;
+    padding: 5mm 5mm !important;
+    box-sizing: border-box !important;
+    display: grid !important;
+    grid-template-columns: repeat(3, 63mm) !important;
+    grid-template-rows: repeat(3, 93mm) !important;
+    column-gap: 3mm !important;
+    row-gap: 3mm !important;
+    justify-content: center !important;
+    align-content: start !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .print-rekap-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .signature-block {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}

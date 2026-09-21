@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Data Siswa: Dapat dibaca publik (kiosk/kamera), diubah oleh admin/kiosk
+    match /siswa/{nisn} {
+      allow read, write: if true;
+    }
+
+    // 2. Data Presensi: Dapat dibaca dan dicatat langsung oleh Kiosk QR scanner
+    match /presensi/{presensiId} {
+      allow read, write: if true;
+    }
+
+    // 3. Pengaturan Identitas Sekolah & Jadwal Waktu Absensi
+    match /pengaturan/{docId} {
+      allow read, write: if true;
+    }
+
+    // 4. Kalender Hari Efektif Belajar (HEB)
+    match /kalender_heb/{docId} {
+      allow read, write: if true;
+    }
+
+    // Aturan bawaan untuk dokumen lainnya
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

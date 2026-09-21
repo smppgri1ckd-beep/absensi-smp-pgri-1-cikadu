@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "Master record of a student",
+      "type": "object",
+      "properties": {
+        "nisn": { "type": "string", "description": "Nomor Induk Siswa Nasional" },
+        "nama": { "type": "string", "description": "Nama lengkap siswa" },
+        "jk": { "type": "string", "enum": ["L", "P"], "description": "Jenis kelamin" },
+        "kelas": { "type": "string", "description": "Rombongan belajar" },
+        "fotoUrl": { "type": "string", "description": "URL foto siswa atau placeholder" }
+      },
+      "required": ["nisn", "nama", "jk", "kelas"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Log record of student attendance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique key PRESENSI_NISN_DATE_SESSION" },
+        "tanggal": { "type": "string", "description": "Format YYYY-MM-DD" },
+        "waktu": { "type": "string", "description": "Format HH:mm:ss" },
+        "nisn": { "type": "string", "description": "NISN siswa" },
+        "nama": { "type": "string", "description": "Nama siswa" },
+        "kelas": { "type": "string", "description": "Kelas siswa" },
+        "sesi": { "type": "string", "enum": ["Pagi", "Siang"], "description": "Sesi presensi" },
+        "status": { "type": "string", "description": "Status kehadiran siswa" }
+      },
+      "required": ["id", "tanggal", "waktu", "nisn", "nama", "kelas", "sesi", "status"]
+    },
+    "SchoolConfig": {
+      "title": "SchoolConfig",
+      "description": "School profile and attendance scheduling configuration",
+      "type": "object",
+      "properties": {
+        "namaSekolah": { "type": "string" },
+        "npsn": { "type": "string" },
+        "kota": { "type": "string" },
+        "alamat": { "type": "string" },
+        "kontak": { "type": "string" },
+        "namaKepsek": { "type": "string" },
+        "nipKepsek": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "sistemHariSekolah": { "type": "string" }
+      },
+      "required": ["namaSekolah", "npsn", "kota", "alamat"]
+    },
+    "KalenderHeb": {
+      "title": "KalenderHeb",
+      "description": "Effective school days mapping",
+      "type": "object",
+      "properties": {
+        "kalenderData": { "type": "object", "description": "Date YYYY-MM-DD to boolean flag" }
+      },
+      "required": ["kalenderData"]
+    }
+  },
+  "firestore": {
+    "/siswa/{nisn}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Collection of enrolled students"
+    },
+    "/presensi/{presensiId}": {
+      "schema": { "$ref": "#/entities/AttendanceRecord" },
+      "description": "Collection of recorded student attendance"
+    },
+    "/pengaturan/identitas_sekolah": {
+      "schema": { "$ref": "#/entities/SchoolConfig" },
+      "description": "Document holding school profile, schedule, and settings"
+    },
+    "/kalender_heb/active": {
+      "schema": { "$ref": "#/entities/KalenderHeb" },
+      "description": "Document storing active semester effective school days"
+    }
+  }
+}

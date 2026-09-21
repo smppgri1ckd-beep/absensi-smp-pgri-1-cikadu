@@ -1,0 +1,802 @@
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  Student,
+  AttendanceRecord,
+  SchoolConfig,
+  UserSession,
+  ViewType,
+  AttendanceSession,
+} from './types';
+import {
+  db,
+  auth,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  onSnapshot,
+  writeBatch,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  DEFAULT_SCHOOL_CONFIG,
+  SEED_STUDENTS,
+} from './firebase';
+import { playBeep } from './utils/audio';
+
+import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
+import { KioskView } from './components/KioskView';
+import { AdminDashboard } from './components/AdminDashboard';
+import { StudentMasterView } from './components/StudentMasterView';
+import { AttendanceManageView } from './components/AttendanceManageView';
+import { IdCardPrintView } from './components/IdCardPrintView';
+import { QrDownloadView } from './components/QrDownloadView';
+import { CalendarHebView } from './components/CalendarHebView';
+import { RekapReportView } from './components/RekapReportView';
+import { SettingsView } from './components/SettingsView';
+import { WelcomeModal } from './components/WelcomeModal';
+import { LoginModal } from './components/LoginModal';
+import { NoticeModal, ConfirmModal } from './components/NoticeModal';
+import { NotificationBanner } from './components/NotificationBanner';
+
+export default function App() {
+  const [students, setStudents] = useState<Student[]>(() => {
+    const saved = localStorage.getItem('epresensi_local_students');
+    return saved ? JSON.parse(saved) : SEED_STUDENTS;
+  });
+
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
+    const saved = localStorage.getItem('epresensi_local_attendance');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [config, setConfig] = useState<SchoolConfig>(() => {
+    const saved = localStorage.getItem('epresensi_local_config');
+    return saved ? JSON.parse(saved) : DEFAULT_SCHOOL_CONFIG;
+  });
+
+  const [kalenderHebData, setKalenderHebData] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('epresensi_local_heb');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const [userSession, setUserSession] = useState<UserSession>(() => {
+    const saved = localStorage.getItem('epresensi_user_session');
+    return saved ? JSON.parse(saved) : { role: null, name: null };
+  });
+
+  const [currentView, setCurrentView] = useState<ViewType>('kiosk');
+  const [showWelcome, setShowWelcome] = useState<boolean>(() => {
+    return config.welcomeScreen.show !== false;
+  });
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+
+  // Notifications & Confirmations
+  const [notice, setNotice] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'info' | 'success' | 'warning';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info',
+  });
+
+  const [confirm, setConfirm] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+  });
+
+  const [sessionSwitchBanner, setSessionSwitchBanner] = useState<{
+    show: boolean;
+    title: string;
+    message: string;
+  } | null>(null);
+
+  // Manual Session Override
+  const [manualSessionOverride, setManualSessionOverride] = useState<AttendanceSession | null>(null);
+
+  // Time & Date strings
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const prevSessionRef = useRef<AttendanceSession>('Pagi');
+
+  // PWA Prompt
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  // Compute Active Session automatically based on schedule
+  const computedSession = useMemo<AttendanceSession>(() => {
+    if (manualSessionOverride) return manualSessionOverride;
+
+    const curMin = currentTime.getHours() * 60 + currentTime.getMinutes();
+    const [ah, am] = (config.schedule.afternoonStart || '13:45').split(':').map(Number);
+    const afternoonStartMin = ah * 60 + am;
+
+    return curMin >= afternoonStartMin ? 'Siang' : 'Pagi';
+  }, [currentTime, config.schedule.afternoonStart, manualSessionOverride]);
+
+  // Current day key (senin, selasa, rabu, kamis, jumat, sabtu)
+  const currentDayKey = useMemo(() => {
+    const days = ['senin', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+    return days[currentTime.getDay()] || 'senin';
+  }, [currentTime]);
+
+  // Clock interval and auto-switch detection
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      setCurrentTime(now);
+
+      // Auto-switch check
+      if (config.schedule.autoSwitchSession && !manualSessionOverride) {
+        const curMin = now.getHours() * 60 + now.getMinutes();
+        const [ah, am] = (config.schedule.afternoonStart || '13:45').split(':').map(Number);
+        const afternoonStartMin = ah * 60 + am;
+        const newSession: AttendanceSession = curMin >= afternoonStartMin ? 'Siang' : 'Pagi';
+
+        if (newSession !== prevSessionRef.current) {
+          prevSessionRef.current = newSession;
+          if (config.schedule.soundNotification) {
+            playBeep('switch');
+          }
+          setSessionSwitchBanner({
+            show: true,
+            title: `Beralih Otomatis ke Sesi ${newSession.toUpperCase()}`,
+            message: `Waktu saat ini (${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')} WIB) telah memasuki rentang jadwal Sesi ${newSession}.`,
+          });
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [config.schedule, manualSessionOverride]);
+
+  // Register PWA Install prompt listener
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallPwa = () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => {
+        setDeferredPrompt(null);
+      });
+    }
+  };
+
+  // Synchronize Firestore Realtime Collections
+  useEffect(() => {
+    const firestore = db;
+    if (!firestore) return;
+
+    // 1. Listen to Students
+    const unsubStudents = onSnapshot(
+      collection(firestore, 'siswa'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list: Student[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data() as Student;
+            data.nisn = String(data.nisn || d.id).trim();
+            list.push(data);
+          });
+          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+          setStudents(list);
+          localStorage.setItem('epresensi_local_students', JSON.stringify(list));
+        } else if (students.length === 0) {
+          // Initialize starter students into cloud
+          const batch = writeBatch(firestore);
+          SEED_STUDENTS.forEach((s) => {
+            batch.set(doc(firestore, 'siswa', s.nisn), s);
+          });
+          batch.commit().catch(() => {});
+        }
+      },
+      (err) => console.warn('Firestore students error:', err)
+    );
+
+    // 2. Listen to Attendance
+    const unsubAttendance = onSnapshot(
+      collection(firestore, 'presensi'),
+      (snapshot) => {
+        const uniqueMap = new Map<string, AttendanceRecord>();
+        snapshot.forEach((d) => {
+          const item = d.data() as AttendanceRecord;
+          item.id = d.id;
+          item.nisn = String(item.nisn || '').trim();
+          const dedupeKey = `${item.nisn}_${item.tanggal}_${item.sesi}`;
+          if (!uniqueMap.has(dedupeKey)) {
+            uniqueMap.set(dedupeKey, item);
+          }
+        });
+        const list = Array.from(uniqueMap.values());
+        list.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
+        setAttendance(list);
+        localStorage.setItem('epresensi_local_attendance', JSON.stringify(list));
+      },
+      (err) => console.warn('Firestore attendance error:', err)
+    );
+
+    // 3. Listen to School Config
+    const unsubConfig = onSnapshot(
+      doc(firestore, 'pengaturan', 'identitas_sekolah'),
+      (d) => {
+        if (d.exists()) {
+          const remoteConfig = d.data() as SchoolConfig;
+          const merged: SchoolConfig = {
+            ...DEFAULT_SCHOOL_CONFIG,
+            ...remoteConfig,
+            schedule: {
+              ...DEFAULT_SCHOOL_CONFIG.schedule,
+              ...(remoteConfig.schedule || {}),
+            },
+            welcomeScreen: {
+              ...DEFAULT_SCHOOL_CONFIG.welcomeScreen,
+              ...(remoteConfig.welcomeScreen || {}),
+            },
+            jadwalPiket: {
+              ...DEFAULT_SCHOOL_CONFIG.jadwalPiket,
+              ...(remoteConfig.jadwalPiket || {}),
+            },
+          };
+          setConfig(merged);
+          localStorage.setItem('epresensi_local_config', JSON.stringify(merged));
+        } else {
+          setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), DEFAULT_SCHOOL_CONFIG).catch(() => {});
+        }
+      },
+      (err) => console.warn('Firestore config error:', err)
+    );
+
+    // 4. Listen to HEB Calendar
+    const unsubHeb = onSnapshot(
+      doc(firestore, 'kalender_heb', 'active'),
+      (d) => {
+        if (d.exists()) {
+          const data = d.data()?.kalenderData || {};
+          setKalenderHebData(data);
+          localStorage.setItem('epresensi_local_heb', JSON.stringify(data));
+        }
+      },
+      (err) => console.warn('Firestore HEB error:', err)
+    );
+
+    // 5. Auth listener
+    let unsubAuth: (() => void) | undefined;
+    if (auth) {
+      unsubAuth = onAuthStateChanged(auth, (user) => {
+        if (user) {
+          const session: UserSession = { role: 'ADMIN', name: user.email };
+          setUserSession(session);
+          localStorage.setItem('epresensi_user_session', JSON.stringify(session));
+        }
+      });
+    }
+
+    return () => {
+      unsubStudents();
+      unsubAttendance();
+      unsubConfig();
+      unsubHeb();
+      if (unsubAuth) unsubAuth();
+    };
+  }, []);
+
+  // Format Indonesian strings
+  const timeFormatted = `${String(currentTime.getHours()).padStart(2, '0')}:${String(
+    currentTime.getMinutes()
+  ).padStart(2, '0')}:${String(currentTime.getSeconds()).padStart(2, '0')}`;
+
+  const dateFormatted = useMemo(() => {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', "Jum'at", 'Sabtu'];
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    return `${days[currentTime.getDay()]}, ${currentTime.getDate()} ${
+      months[currentTime.getMonth()]
+    } ${currentTime.getFullYear()}`;
+  }, [currentTime]);
+
+  // Calculate Total HEB
+  const totalHebCount = useMemo(() => {
+    const curYear = currentTime.getFullYear();
+    let count = 0;
+    Object.entries(kalenderHebData).forEach(([dateStr, isHeb]) => {
+      if (isHeb && dateStr.startsWith(String(curYear))) {
+        count++;
+      }
+    });
+    return Math.max(1, count || 112); // sensible default
+  }, [kalenderHebData, currentTime]);
+
+  // Modal Notice & Confirm Handlers
+  const showNotice = (title: string, message: string, type: 'info' | 'success' | 'warning' = 'info') => {
+    setNotice({ isOpen: true, title, message, type });
+  };
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirm({ isOpen: true, title, message, onConfirm });
+  };
+
+  // Auth actions
+  const handleLogin = async (user: string, pass: string): Promise<boolean> => {
+    if (auth) {
+      try {
+        const cred = await signInWithEmailAndPassword(auth, user, pass);
+        const session: UserSession = { role: 'ADMIN', name: cred.user.email };
+        setUserSession(session);
+        localStorage.setItem('epresensi_user_session', JSON.stringify(session));
+        setCurrentView('dashboard');
+        showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
+        return true;
+      } catch (authErr) {
+        // Check local or participants
+      }
+    }
+
+    if (user === 'admin@absensi.id' && pass === 'edudigital') {
+      const session: UserSession = { role: 'ADMIN', name: 'Administrator' };
+      setUserSession(session);
+      localStorage.setItem('epresensi_user_session', JSON.stringify(session));
+      setCurrentView('dashboard');
+      showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
+      return true;
+    }
+
+    if (user === 'peserta' && pass === 'edudigital') {
+      const session: UserSession = { role: 'PESERTA', name: 'Petugas Piket Harian' };
+      setUserSession(session);
+      localStorage.setItem('epresensi_user_session', JSON.stringify(session));
+      setCurrentView('kiosk');
+      showNotice('Akses Diberikan', 'Login Petugas berhasil. Mode Kiosk siap digunakan!', 'success');
+      return true;
+    }
+
+    return false;
+  };
+
+  const handleLogout = () => {
+    if (auth) {
+      signOut(auth).catch(() => {});
+    }
+    const session: UserSession = { role: null, name: null };
+    setUserSession(session);
+    localStorage.removeItem('epresensi_user_session');
+    setCurrentView('kiosk');
+    showNotice('Sesi Berakhir', 'Anda telah kembali ke Mode Kiosk Publik.', 'info');
+  };
+
+  // Record Attendance Action
+  const handleRecordAttendance = async (record: AttendanceRecord): Promise<boolean> => {
+    // Update local state first for instantaneous feedback
+    setAttendance((prev) => {
+      const filtered = prev.filter((a) => a.id !== record.id);
+      return [record, ...filtered];
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'presensi', record.id), record);
+      } catch (err) {
+        console.warn('Failed to sync attendance to Firestore:', err);
+      }
+    }
+    return true;
+  };
+
+  // Student CRUD Actions
+  const handleAddOrUpdateStudent = async (student: Student, oldNisn?: string) => {
+    setStudents((prev) => {
+      const filtered = prev.filter((s) => s.nisn !== (oldNisn || student.nisn));
+      const updated = [...filtered, student];
+      updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        if (oldNisn && oldNisn !== student.nisn) {
+          await deleteDoc(doc(firestore, 'siswa', oldNisn));
+        }
+        await setDoc(doc(firestore, 'siswa', student.nisn), student);
+      } catch (err) {
+        console.warn('Firestore student sync error:', err);
+      }
+    }
+  };
+
+  const handleDeleteStudent = async (nisn: string) => {
+    setStudents((prev) => {
+      const updated = prev.filter((s) => s.nisn !== nisn);
+      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
+      return updated;
+    });
+    const firestore = db;
+    if (firestore) {
+      try {
+        await deleteDoc(doc(firestore, 'siswa', nisn));
+      } catch (err) {
+        console.warn('Firestore delete student error:', err);
+      }
+    }
+  };
+
+  const handleBatchDeleteStudents = async (nisns: string[]) => {
+    setStudents((prev) => {
+      const updated = prev.filter((s) => !nisns.includes(s.nisn));
+      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        const chunkSize = 200;
+        for (let i = 0; i < nisns.length; i += chunkSize) {
+          const chunk = nisns.slice(i, i + chunkSize);
+          const batch = writeBatch(firestore);
+          chunk.forEach((nisn) => batch.delete(doc(firestore, 'siswa', nisn)));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Firestore batch delete students error:', err);
+      }
+    }
+  };
+
+  const handleBatchImportStudents = async (newStudents: Student[]) => {
+    setStudents((prev) => {
+      const map = new Map<string, Student>();
+      prev.forEach((s) => map.set(s.nisn, s));
+      newStudents.forEach((s) => map.set(s.nisn, s));
+      const updated = Array.from(map.values());
+      updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        const chunkSize = 200;
+        for (let i = 0; i < newStudents.length; i += chunkSize) {
+          const chunk = newStudents.slice(i, i + chunkSize);
+          const batch = writeBatch(firestore);
+          chunk.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), s));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Firestore batch import students error:', err);
+      }
+    }
+  };
+
+  // Attendance CRUD Actions
+  const handleAddOrUpdateAttendance = async (record: AttendanceRecord) => {
+    setAttendance((prev) => {
+      const filtered = prev.filter((a) => a.id !== record.id);
+      const updated = [record, ...filtered];
+      localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'presensi', record.id), record);
+      } catch (err) {
+        console.warn('Firestore attendance sync error:', err);
+      }
+    }
+  };
+
+  const handleDeleteAttendance = async (id: string) => {
+    setAttendance((prev) => {
+      const updated = prev.filter((a) => a.id !== id);
+      localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
+      return updated;
+    });
+    const firestore = db;
+    if (firestore) {
+      try {
+        await deleteDoc(doc(firestore, 'presensi', id));
+      } catch (err) {
+        console.warn('Firestore delete attendance error:', err);
+      }
+    }
+  };
+
+  const handleBatchDeleteAttendance = async (ids: string[]) => {
+    setAttendance((prev) => {
+      const updated = prev.filter((a) => !ids.includes(a.id));
+      localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        const chunkSize = 200;
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const chunk = ids.slice(i, i + chunkSize);
+          const batch = writeBatch(firestore);
+          chunk.forEach((id) => batch.delete(doc(firestore, 'presensi', id)));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Firestore batch delete attendance error:', err);
+      }
+    }
+  };
+
+  // Config and HEB updates
+  const handleUpdateConfig = async (newConfig: SchoolConfig) => {
+    setConfig(newConfig);
+    localStorage.setItem('epresensi_local_config', JSON.stringify(newConfig));
+    const firestore = db;
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), newConfig);
+      } catch (err) {
+        console.warn('Firestore config update error:', err);
+      }
+    }
+  };
+
+  const handleUpdateKalenderHeb = async (data: Record<string, boolean>) => {
+    setKalenderHebData(data);
+    localStorage.setItem('epresensi_local_heb', JSON.stringify(data));
+    const firestore = db;
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: data });
+      } catch (err) {
+        console.warn('Firestore HEB update error:', err);
+      }
+    }
+  };
+
+  // Maintenance: clean duplicates
+  const handleCleanDuplicates = async (): Promise<number> => {
+    const seen = new Map<string, string>();
+    const dupIds: string[] = [];
+
+    attendance.forEach((a) => {
+      const key = `${a.nisn.trim()}_${a.tanggal}_${a.sesi}`;
+      if (seen.has(key)) {
+        dupIds.push(a.id);
+      } else {
+        seen.set(key, a.id);
+      }
+    });
+
+    if (dupIds.length > 0) {
+      await handleBatchDeleteAttendance(dupIds);
+    }
+    return dupIds.length;
+  };
+
+  // Maintenance: purge semester
+  const handlePurgeSemester = async (
+    year: number,
+    sem: 'ganjil' | 'genap'
+  ): Promise<number> => {
+    const startIso = sem === 'ganjil' ? `${year}-07-01` : `${year}-01-01`;
+    const endIso = sem === 'ganjil' ? `${year}-12-31` : `${year}-06-30`;
+
+    const targets = attendance
+      .filter((a) => a.tanggal >= startIso && a.tanggal <= endIso)
+      .map((a) => a.id);
+
+    if (targets.length > 0) {
+      await handleBatchDeleteAttendance(targets);
+    }
+    return targets.length;
+  };
+
+  const handleToggleSessionManual = () => {
+    const next = computedSession === 'Pagi' ? 'Siang' : 'Pagi';
+    setManualSessionOverride(next);
+    showNotice(
+      'Sesi Presensi Dialihkan',
+      `Mode pemindaian dialihkan manual ke Sesi ${next.toUpperCase()}.`,
+      'info'
+    );
+  };
+
+  const handleSelectView = (view: ViewType) => {
+    if (view !== 'kiosk' && userSession.role !== 'ADMIN') {
+      setIsLoginModalOpen(true);
+      return;
+    }
+    setCurrentView(view);
+  };
+
+  return (
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-50 text-slate-900 select-none">
+      {/* Navbar Header */}
+      <Navbar
+        config={config}
+        userSession={userSession}
+        activeSession={computedSession}
+        timeString={timeFormatted}
+        dateString={dateFormatted}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
+        onShowWelcome={() => setShowWelcome(true)}
+        onToggleSessionManual={handleToggleSessionManual}
+        canInstallPwa={Boolean(deferredPrompt)}
+        onInstallPwa={handleInstallPwa}
+      />
+
+      {/* Main Body */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar Desktop (Admin) */}
+        {userSession.role === 'ADMIN' && (
+          <Sidebar
+            currentView={currentView}
+            userSession={userSession}
+            onSelectView={handleSelectView}
+            onLogout={handleLogout}
+          />
+        )}
+
+        {/* View Content Area */}
+        <main className="flex-1 overflow-y-auto p-3 sm:p-5 lg:p-6 pb-20 md:pb-6">
+          {currentView === 'kiosk' && (
+            <KioskView
+              students={students}
+              attendance={attendance}
+              config={config}
+              activeSession={computedSession}
+              timeString={timeFormatted}
+              onRecordAttendance={handleRecordAttendance}
+              onToggleSessionManual={handleToggleSessionManual}
+              dayKey={currentDayKey}
+            />
+          )}
+
+          {currentView === 'dashboard' && userSession.role === 'ADMIN' && (
+            <AdminDashboard
+              students={students}
+              attendance={attendance}
+              config={config}
+              totalHeb={totalHebCount}
+              dayKey={currentDayKey}
+            />
+          )}
+
+          {currentView === 'dataSiswa' && userSession.role === 'ADMIN' && (
+            <StudentMasterView
+              students={students}
+              onAddOrUpdateStudent={handleAddOrUpdateStudent}
+              onDeleteStudent={handleDeleteStudent}
+              onBatchDeleteStudents={handleBatchDeleteStudents}
+              onBatchImportStudents={handleBatchImportStudents}
+              onShowNotice={showNotice}
+              onShowConfirm={showConfirm}
+            />
+          )}
+
+          {currentView === 'kelolaAbsensi' && userSession.role === 'ADMIN' && (
+            <AttendanceManageView
+              students={students}
+              attendance={attendance}
+              onAddOrUpdateAttendance={handleAddOrUpdateAttendance}
+              onDeleteAttendance={handleDeleteAttendance}
+              onBatchDeleteAttendance={handleBatchDeleteAttendance}
+              onShowNotice={showNotice}
+              onShowConfirm={showConfirm}
+            />
+          )}
+
+          {currentView === 'cetakQr' && userSession.role === 'ADMIN' && (
+            <IdCardPrintView students={students} config={config} />
+          )}
+
+          {currentView === 'downloadQr' && userSession.role === 'ADMIN' && (
+            <QrDownloadView students={students} onShowNotice={showNotice} />
+          )}
+
+          {currentView === 'kalenderHeb' && userSession.role === 'ADMIN' && (
+            <CalendarHebView
+              config={config}
+              kalenderHebData={kalenderHebData}
+              onUpdateKalenderHeb={handleUpdateKalenderHeb}
+              onShowNotice={showNotice}
+            />
+          )}
+
+          {currentView === 'rekapPdf' && userSession.role === 'ADMIN' && (
+            <RekapReportView
+              students={students}
+              attendance={attendance}
+              config={config}
+              totalHeb={totalHebCount}
+              dayKey={currentDayKey}
+            />
+          )}
+
+          {currentView === 'pengaturan' && userSession.role === 'ADMIN' && (
+            <SettingsView
+              config={config}
+              attendance={attendance}
+              onUpdateConfig={handleUpdateConfig}
+              onCleanDuplicates={handleCleanDuplicates}
+              onPurgeSemester={handlePurgeSemester}
+              onShowNotice={showNotice}
+              onShowConfirm={showConfirm}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* Modals & Notifications */}
+      {showWelcome && (
+        <WelcomeModal config={config} onEnter={() => setShowWelcome(false)} />
+      )}
+
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLogin={handleLogin}
+        onShowNotice={showNotice}
+      />
+
+      <NoticeModal
+        isOpen={notice.isOpen}
+        title={notice.title}
+        message={notice.message}
+        type={notice.type}
+        onClose={() => setNotice((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      <ConfirmModal
+        isOpen={confirm.isOpen}
+        title={confirm.title}
+        message={confirm.message}
+        onConfirm={() => {
+          confirm.onConfirm();
+          setConfirm((prev) => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={() => setConfirm((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      <NotificationBanner
+        banner={sessionSwitchBanner}
+        onDismiss={() => setSessionSwitchBanner(null)}
+      />
+    </div>
+  );
+}

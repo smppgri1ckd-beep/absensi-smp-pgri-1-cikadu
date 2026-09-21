@@ -1,0 +1,6 @@
+{
+  "name": "E-Presensi Siswa QR Code",
+  "description": "Sistem Presensi Siswa Digital berbasis QR Code, Rekapitulasi Real-time Firebase, dan Cetak Kartu Siswa F4",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
