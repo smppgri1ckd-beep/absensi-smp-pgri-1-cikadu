@@ -1,6 +1,6 @@
 {
   "name": "E-Presensi Siswa QR Code",
-  "description": "Sistem Presensi Siswa Digital berbasis QR Code, Rekapitulasi Real-time Firebase, dan Cetak Kartu Siswa F4",
+  "description": "Sistem Presensi Siswa Digital berbasis QR Code, Rekapitulasi Real-time Firebase, Cetak Kartu Siswa F4, serta Portal Login & Manajemen Guru",
   "requestFramePermissions": [
     "camera"
   ],

@@ -10,7 +10,10 @@ import {
   FileSpreadsheet,
   Sliders,
   LogOut,
-  ShieldAlert,
+  UserCheck,
+  GraduationCap,
+  BookOpen,
+  Edit3,
 } from 'lucide-react';
 import { ViewType, UserSession } from '../types';
 
@@ -28,82 +31,114 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onLogout,
 }) => {
   const isAdmin = userSession.role === 'ADMIN';
+  const isGuru = userSession.role === 'GURU';
 
-  const menuItems: { id: ViewType; label: string; icon: React.ReactNode; group: string; adminOnly: boolean }[] = [
+  // Admin menu items
+  const adminMenuItems: { id: ViewType; label: string; icon: React.ReactNode; group: string }[] = [
     {
       id: 'kiosk',
       label: 'Mode Kiosk Presensi',
       icon: <Camera className="w-4 h-4 text-blue-600" />,
       group: 'Operasional',
-      adminOnly: false,
     },
     {
       id: 'pantauPublik',
       label: 'Portal Pantau Ortu / Publik',
       icon: <Users className="w-4 h-4 text-sky-600" />,
       group: 'Operasional',
-      adminOnly: false,
     },
     {
       id: 'dashboard',
       label: 'Dashboard Admin Real-Time',
       icon: <LayoutDashboard className="w-4 h-4 text-indigo-600" />,
       group: 'Operasional',
-      adminOnly: true,
+    },
+    {
+      id: 'kelolaGuru',
+      label: 'Manajemen Akun Guru',
+      icon: <UserCheck className="w-4 h-4 text-emerald-600" />,
+      group: 'Pengguna & Guru',
     },
     {
       id: 'dataSiswa',
       label: 'Master Database Siswa',
       icon: <Users className="w-4 h-4 text-violet-600" />,
       group: 'Operasional',
-      adminOnly: true,
     },
     {
       id: 'kelolaAbsensi',
       label: 'Kelola Data Presensi',
       icon: <ClipboardCheck className="w-4 h-4 text-emerald-600" />,
       group: 'Operasional',
-      adminOnly: true,
     },
     {
       id: 'cetakQr',
       label: 'Cetak Kartu Siswa (F4/A4)',
       icon: <CreditCard className="w-4 h-4 text-amber-600" />,
       group: 'Penerbitan Kartu & QR',
-      adminOnly: true,
     },
     {
       id: 'downloadQr',
       label: 'Download QR Siswa',
       icon: <QrCode className="w-4 h-4 text-amber-500" />,
       group: 'Penerbitan Kartu & QR',
-      adminOnly: true,
     },
     {
       id: 'kalenderHeb',
       label: 'Kalender HEB',
       icon: <CalendarDays className="w-4 h-4 text-purple-600" />,
       group: 'Laporan & Kalender',
-      adminOnly: true,
     },
     {
       id: 'rekapPdf',
       label: 'Rekap & Laporan Resmi (A4)',
       icon: <FileSpreadsheet className="w-4 h-4 text-rose-600" />,
       group: 'Laporan & Kalender',
-      adminOnly: true,
     },
     {
       id: 'pengaturan',
       label: 'Pengaturan & Jadwal',
       icon: <Sliders className="w-4 h-4 text-cyan-600" />,
       group: 'Sistem',
-      adminOnly: true,
     },
   ];
 
-  // Group items
-  const groups = Array.from(new Set(menuItems.map(m => m.group)));
+  // Guru menu items
+  const guruMenuItems: { id: ViewType; label: string; icon: React.ReactNode; group: string }[] = [
+    {
+      id: 'portalGuru',
+      label: 'Portal & Presensi Kelas',
+      icon: <GraduationCap className="w-4 h-4 text-emerald-600" />,
+      group: 'Akses Guru',
+    },
+    {
+      id: 'guruIzinAbsen',
+      label: 'Input Izin & Sakit Siswa',
+      icon: <Edit3 className="w-4 h-4 text-blue-600" />,
+      group: 'Akses Guru',
+    },
+    {
+      id: 'kalenderHeb',
+      label: 'Kalender Akademik HEB',
+      icon: <CalendarDays className="w-4 h-4 text-purple-600" />,
+      group: 'Informasi Sekolah',
+    },
+    {
+      id: 'kiosk',
+      label: 'Tampilan Scanner Kiosk',
+      icon: <Camera className="w-4 h-4 text-blue-500" />,
+      group: 'Informasi Sekolah',
+    },
+    {
+      id: 'pantauPublik',
+      label: 'Pantau Presensi Ortu',
+      icon: <Users className="w-4 h-4 text-sky-600" />,
+      group: 'Informasi Sekolah',
+    },
+  ];
+
+  const menuItems = isAdmin ? adminMenuItems : isGuru ? guruMenuItems : [];
+  const groups = Array.from(new Set(menuItems.map((m) => m.group)));
 
   return (
     <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 z-20 h-full shadow-xs">
@@ -111,9 +146,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Navigation list */}
         <nav className="flex-1 overflow-y-auto p-3 space-y-4 text-xs font-semibold">
           {groups.map((grp) => {
-            const itemsInGroup = menuItems.filter(
-              (item) => item.group === grp && (!item.adminOnly || isAdmin)
-            );
+            const itemsInGroup = menuItems.filter((item) => item.group === grp);
             if (itemsInGroup.length === 0) return null;
 
             return (
@@ -147,16 +180,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* User Card */}
         <div className="p-3 border-t border-slate-100 bg-slate-50/80">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 overflow-hidden">
-              <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
-                {userSession.role === 'ADMIN' ? 'AD' : 'PK'}
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div
+                className={`w-8 h-8 rounded-xl text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs ${
+                  isAdmin ? 'bg-blue-600' : isGuru ? 'bg-emerald-600' : 'bg-slate-600'
+                }`}
+              >
+                {isAdmin ? 'AD' : isGuru ? 'GR' : 'PK'}
               </div>
               <div className="truncate">
-                <p className="text-xs font-bold text-slate-800 leading-none">
-                  {userSession.role || 'GUEST'}
+                <p className="text-xs font-extrabold text-slate-800 leading-none">
+                  {isAdmin
+                    ? 'ADMINISTRATOR'
+                    : isGuru
+                    ? userSession.teacherData?.nama || userSession.name || 'GURU'
+                    : userSession.role || 'GUEST'}
                 </p>
                 <p className="text-[10px] text-slate-500 truncate mt-0.5">
-                  {userSession.name || 'Pengguna Publik'}
+                  {isGuru && userSession.teacherData?.mapel
+                    ? `${userSession.teacherData.mapel} ${
+                        userSession.teacherData.waliKelas &&
+                        userSession.teacherData.waliKelas !== 'Bukan Wali Kelas'
+                          ? `• Wali ${userSession.teacherData.waliKelas}`
+                          : ''
+                      }`
+                    : userSession.name || 'Pengguna Publik'}
                 </p>
               </div>
             </div>
@@ -164,7 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onLogout}
-                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition"
+                className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
                 title="Keluar"
               >
                 <LogOut className="w-4 h-4" />

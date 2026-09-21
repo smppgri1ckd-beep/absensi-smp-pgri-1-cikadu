@@ -6,6 +6,7 @@ import {
   UserSession,
   ViewType,
   AttendanceSession,
+  TeacherUser,
 } from './types';
 import {
   db,
@@ -23,6 +24,7 @@ import {
   onAuthStateChanged,
   DEFAULT_SCHOOL_CONFIG,
   SEED_STUDENTS,
+  SEED_TEACHERS,
 } from './firebase';
 import { playBeep } from './utils/audio';
 
@@ -38,6 +40,8 @@ import { CalendarHebView } from './components/CalendarHebView';
 import { RekapReportView } from './components/RekapReportView';
 import { SettingsView } from './components/SettingsView';
 import { PublicRekapView } from './components/PublicRekapView';
+import { TeacherManageView } from './components/TeacherManageView';
+import { TeacherPortalView } from './components/TeacherPortalView';
 import { WelcomeModal } from './components/WelcomeModal';
 import { LoginModal } from './components/LoginModal';
 import { NoticeModal, ConfirmModal } from './components/NoticeModal';
@@ -62,6 +66,11 @@ export default function App() {
   const [kalenderHebData, setKalenderHebData] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('epresensi_local_heb');
     return saved ? JSON.parse(saved) : {};
+  });
+
+  const [teachers, setTeachers] = useState<TeacherUser[]>(() => {
+    const saved = localStorage.getItem('epresensi_local_teachers');
+    return saved ? JSON.parse(saved) : SEED_TEACHERS;
   });
 
   const [userSession, setUserSession] = useState<UserSession>(() => {
@@ -279,7 +288,33 @@ export default function App() {
       (err) => console.warn('Firestore HEB error:', err)
     );
 
-    // 5. Auth listener
+    // 5. Listen to Teachers (guru_users)
+    const unsubTeachers = onSnapshot(
+      collection(firestore, 'guru_users'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list: TeacherUser[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data() as TeacherUser;
+            data.id = d.id;
+            list.push(data);
+          });
+          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+          setTeachers(list);
+          localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
+        } else {
+          // Initialize starter teacher accounts into cloud
+          const batch = writeBatch(firestore);
+          SEED_TEACHERS.forEach((t) => {
+            batch.set(doc(firestore, 'guru_users', t.id), t);
+          });
+          batch.commit().catch(() => {});
+        }
+      },
+      (err) => console.warn('Firestore teachers error:', err)
+    );
+
+    // 6. Auth listener
     let unsubAuth: (() => void) | undefined;
     if (auth) {
       unsubAuth = onAuthStateChanged(auth, (user) => {
@@ -296,6 +331,7 @@ export default function App() {
       unsubAttendance();
       unsubConfig();
       unsubHeb();
+      unsubTeachers();
       if (unsubAuth) unsubAuth();
     };
   }, []);
@@ -349,7 +385,11 @@ export default function App() {
 
   // Auth actions
   const handleLogin = async (user: string, pass: string): Promise<boolean> => {
-    if (auth) {
+    const normalizedUser = user.trim().toLowerCase();
+    const trimmedPass = pass.trim();
+
+    // 1. Firebase Auth for Administrator (if connected)
+    if (auth && normalizedUser.includes('@')) {
       try {
         const cred = await signInWithEmailAndPassword(auth, user, pass);
         const session: UserSession = { role: 'ADMIN', name: cred.user.email };
@@ -359,11 +399,12 @@ export default function App() {
         showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
         return true;
       } catch (authErr) {
-        // Check local or participants
+        // Fallback to local accounts
       }
     }
 
-    if (user === 'admin@absensi.id' && pass === 'edudigital') {
+    // 2. Default Administrator Local Credentials
+    if (normalizedUser === 'admin@absensi.id' && trimmedPass === 'edudigital') {
       const session: UserSession = { role: 'ADMIN', name: 'Administrator' };
       setUserSession(session);
       localStorage.setItem('epresensi_user_session', JSON.stringify(session));
@@ -372,7 +413,42 @@ export default function App() {
       return true;
     }
 
-    if (user === 'peserta' && pass === 'edudigital') {
+    // 3. Teacher (Guru) Authentication Verification
+    const foundTeacher = teachers.find(
+      (t) =>
+        (t.username.toLowerCase() === normalizedUser ||
+          t.nip.replace(/\s+/g, '').toLowerCase() === normalizedUser.replace(/\s+/g, '')) &&
+        t.password === trimmedPass
+    );
+
+    if (foundTeacher) {
+      if (foundTeacher.status === 'NONAKTIF') {
+        showNotice(
+          'Akun Dinonaktifkan',
+          'Akun guru ini sedang berstatus NONAKTIF. Silakan hubungi Administrator sekolah untuk mengaktifkan kembali akun Anda.',
+          'warning'
+        );
+        return false;
+      }
+
+      const session: UserSession = {
+        role: 'GURU',
+        name: foundTeacher.nama,
+        teacherData: foundTeacher,
+      };
+      setUserSession(session);
+      localStorage.setItem('epresensi_user_session', JSON.stringify(session));
+      setCurrentView('portalGuru');
+      showNotice(
+        'Selamat Datang, Bapak/Ibu Guru',
+        `Login berhasil sebagai ${foundTeacher.nama} (${foundTeacher.mapel}). Selamat mengajar dan mengelola presensi kelas!`,
+        'success'
+      );
+      return true;
+    }
+
+    // 4. Petugas Piket (Peserta) Check
+    if (normalizedUser === 'peserta' && trimmedPass === 'edudigital') {
       const session: UserSession = { role: 'PESERTA', name: 'Petugas Piket Harian' };
       setUserSession(session);
       localStorage.setItem('epresensi_user_session', JSON.stringify(session));
@@ -393,6 +469,71 @@ export default function App() {
     localStorage.removeItem('epresensi_user_session');
     setCurrentView('kiosk');
     showNotice('Sesi Berakhir', 'Anda telah kembali ke Mode Kiosk Publik.', 'info');
+  };
+
+  // Teacher Management Actions (Admin)
+  const handleAddTeacher = async (teacher: TeacherUser) => {
+    setTeachers((prev) => {
+      const updated = [...prev, teacher];
+      updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'guru_users', teacher.id), teacher);
+      } catch (err) {
+        console.warn('Firestore add teacher error:', err);
+      }
+    }
+  };
+
+  const handleUpdateTeacher = async (teacher: TeacherUser) => {
+    setTeachers((prev) => {
+      const updated = prev.map((t) => (t.id === teacher.id ? teacher : t));
+      updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
+      return updated;
+    });
+
+    // If currently logged in teacher is modified, update session
+    if (userSession.teacherData?.id === teacher.id) {
+      const updatedSession: UserSession = {
+        ...userSession,
+        name: teacher.nama,
+        teacherData: teacher,
+      };
+      setUserSession(updatedSession);
+      localStorage.setItem('epresensi_user_session', JSON.stringify(updatedSession));
+    }
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        await setDoc(doc(firestore, 'guru_users', teacher.id), teacher);
+      } catch (err) {
+        console.warn('Firestore update teacher error:', err);
+      }
+    }
+  };
+
+  const handleDeleteTeacher = async (id: string) => {
+    setTeachers((prev) => {
+      const updated = prev.filter((t) => t.id !== id);
+      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        await deleteDoc(doc(firestore, 'guru_users', id));
+      } catch (err) {
+        console.warn('Firestore delete teacher error:', err);
+      }
+    }
   };
 
   // Record Attendance Action
@@ -637,7 +778,30 @@ export default function App() {
   };
 
   const handleSelectView = (view: ViewType) => {
-    if (view !== 'kiosk' && view !== 'pantauPublik' && userSession.role !== 'ADMIN') {
+    if (view === 'kiosk' || view === 'pantauPublik') {
+      setCurrentView(view);
+      return;
+    }
+
+    if (view === 'portalGuru' || view === 'guruIzinAbsen') {
+      if (userSession.role !== 'GURU' && userSession.role !== 'ADMIN') {
+        setIsLoginModalOpen(true);
+        return;
+      }
+      setCurrentView(view);
+      return;
+    }
+
+    if (view === 'kalenderHeb') {
+      if (userSession.role !== 'ADMIN' && userSession.role !== 'GURU') {
+        setIsLoginModalOpen(true);
+        return;
+      }
+      setCurrentView(view);
+      return;
+    }
+
+    if (userSession.role !== 'ADMIN') {
       setIsLoginModalOpen(true);
       return;
     }
@@ -657,7 +821,7 @@ export default function App() {
         onSelectView={handleSelectView}
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
-        onShowWelcome={() => setShowWelcome(true)}
+        onShowWelcome={() => setShowWelcome(false)}
         onToggleSessionManual={handleToggleSessionManual}
         canInstallPwa={Boolean(deferredPrompt)}
         onInstallPwa={handleInstallPwa}
@@ -665,8 +829,8 @@ export default function App() {
 
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar Desktop (Admin) */}
-        {userSession.role === 'ADMIN' && (
+        {/* Sidebar Desktop (Admin & Guru) */}
+        {(userSession.role === 'ADMIN' || userSession.role === 'GURU') && (
           <Sidebar
             currentView={currentView}
             userSession={userSession}
@@ -697,8 +861,52 @@ export default function App() {
               attendance={attendance}
               config={config}
               dayKey={currentDayKey}
+              teachers={teachers}
               onGoToKiosk={() => setCurrentView('kiosk')}
               onOpenLogin={() => setIsLoginModalOpen(true)}
+            />
+          )}
+
+          {/* Guru Views */}
+          {(currentView === 'portalGuru' || currentView === 'guruIzinAbsen') &&
+            (userSession.role === 'GURU' || userSession.role === 'ADMIN') && (
+              <TeacherPortalView
+                teacher={
+                  userSession.teacherData ||
+                  teachers[0] || {
+                    id: 'admin-guru',
+                    nama: userSession.name || 'Administrator',
+                    nip: '-',
+                    username: 'admin',
+                    password: '',
+                    mapel: 'Semua Mata Pelajaran',
+                    status: 'AKTIF',
+                    createdAt: new Date().toISOString(),
+                  }
+                }
+                students={students}
+                attendance={attendance}
+                config={config}
+                activeSession={computedSession}
+                timeString={timeFormatted}
+                dateString={dateFormatted}
+                dayKey={currentDayKey}
+                onRecordAttendance={handleRecordAttendance}
+                onShowNotice={showNotice}
+                onShowConfirm={showConfirm}
+              />
+            )}
+
+          {/* Admin: Teacher Management */}
+          {currentView === 'kelolaGuru' && userSession.role === 'ADMIN' && (
+            <TeacherManageView
+              teachers={teachers}
+              config={config}
+              onAddTeacher={handleAddTeacher}
+              onUpdateTeacher={handleUpdateTeacher}
+              onDeleteTeacher={handleDeleteTeacher}
+              onShowNotice={showNotice}
+              onShowConfirm={showConfirm}
             />
           )}
 
@@ -715,6 +923,9 @@ export default function App() {
           {currentView === 'dataSiswa' && userSession.role === 'ADMIN' && (
             <StudentMasterView
               students={students}
+              attendance={attendance}
+              config={config}
+              teachers={teachers}
               onAddOrUpdateStudent={handleAddOrUpdateStudent}
               onDeleteStudent={handleDeleteStudent}
               onBatchDeleteStudents={handleBatchDeleteStudents}
@@ -728,6 +939,8 @@ export default function App() {
             <AttendanceManageView
               students={students}
               attendance={attendance}
+              config={config}
+              teachers={teachers}
               onAddOrUpdateAttendance={handleAddOrUpdateAttendance}
               onDeleteAttendance={handleDeleteAttendance}
               onBatchDeleteAttendance={handleBatchDeleteAttendance}
@@ -744,14 +957,15 @@ export default function App() {
             <QrDownloadView students={students} onShowNotice={showNotice} />
           )}
 
-          {currentView === 'kalenderHeb' && userSession.role === 'ADMIN' && (
-            <CalendarHebView
-              config={config}
-              kalenderHebData={kalenderHebData}
-              onUpdateKalenderHeb={handleUpdateKalenderHeb}
-              onShowNotice={showNotice}
-            />
-          )}
+          {currentView === 'kalenderHeb' &&
+            (userSession.role === 'ADMIN' || userSession.role === 'GURU') && (
+              <CalendarHebView
+                config={config}
+                kalenderHebData={kalenderHebData}
+                onUpdateKalenderHeb={handleUpdateKalenderHeb}
+                onShowNotice={showNotice}
+              />
+            )}
 
           {currentView === 'rekapPdf' && userSession.role === 'ADMIN' && (
             <RekapReportView

@@ -11,6 +11,7 @@ import {
   ArrowRightLeft,
   Camera,
   Users,
+  GraduationCap,
 } from 'lucide-react';
 import { SchoolConfig, UserSession, AttendanceSession, ViewType } from '../types';
 
@@ -161,14 +162,28 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Auth / Role Indicator */}
         {userSession.role ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="px-2 sm:px-2.5 py-1 bg-blue-50 text-blue-700 font-extrabold rounded-xl text-xs border border-blue-200 flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">{userSession.role}</span>
+            <span
+              className={`px-2 sm:px-2.5 py-1 font-extrabold rounded-xl text-xs border flex items-center gap-1.5 ${
+                userSession.role === 'GURU'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}
+            >
+              {userSession.role === 'GURU' ? (
+                <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
+              ) : (
+                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              )}
+              <span className="hidden sm:inline">
+                {userSession.role === 'GURU'
+                  ? `Guru: ${userSession.teacherData?.nama?.split(',')[0] || userSession.name}`
+                  : userSession.role}
+              </span>
             </span>
             <button
               type="button"
               onClick={onLogout}
-              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg text-xs font-bold transition hover:bg-rose-50"
+              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg text-xs font-bold transition hover:bg-rose-50 cursor-pointer"
               title="Keluar Akun"
             >
               <LogOut className="w-4 h-4" />

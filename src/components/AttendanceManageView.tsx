@@ -11,12 +11,16 @@ import {
   Calendar,
   Clock,
   X,
+  Eye,
 } from 'lucide-react';
-import { Student, AttendanceRecord, AttendanceSession, AttendanceStatus } from '../types';
+import { Student, AttendanceRecord, AttendanceSession, AttendanceStatus, SchoolConfig, TeacherUser } from '../types';
+import { StudentDetailModal } from './StudentDetailModal';
 
 interface AttendanceManageViewProps {
   students: Student[];
   attendance: AttendanceRecord[];
+  config?: SchoolConfig;
+  teachers?: TeacherUser[];
   onAddOrUpdateAttendance: (record: AttendanceRecord) => Promise<void>;
   onDeleteAttendance: (id: string) => Promise<void>;
   onBatchDeleteAttendance: (ids: string[]) => Promise<void>;
@@ -27,6 +31,8 @@ interface AttendanceManageViewProps {
 export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
   students,
   attendance,
+  config,
+  teachers = [],
   onAddOrUpdateAttendance,
   onDeleteAttendance,
   onBatchDeleteAttendance,
@@ -41,6 +47,15 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
   const [filterKelas, setFilterKelas] = useState('ALL');
   const [filterSesi, setFilterSesi] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Student Detail Modal state
+  const [selectedDetailStudent, setSelectedDetailStudent] = useState<Student | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  const handleOpenStudentDetail = (s: Student) => {
+    setSelectedDetailStudent(s);
+    setIsDetailModalOpen(true);
+  };
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -360,8 +375,26 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                       </td>
                       <td className="p-3 font-mono text-slate-500">{a.tanggal}</td>
                       <td className="p-3 font-mono font-bold text-slate-900">{a.waktu}</td>
-                      <td className="p-3 font-mono text-slate-700">{a.nisn}</td>
-                      <td className="p-3 font-semibold text-slate-900">{a.nama}</td>
+                      <td
+                        onClick={() => {
+                          const s = students.find((st) => st.nisn === a.nisn);
+                          if (s) handleOpenStudentDetail(s);
+                        }}
+                        className="p-3 font-mono text-slate-700 hover:text-blue-600 cursor-pointer font-bold"
+                        title="Klik untuk melihat profil lengkap siswa"
+                      >
+                        {a.nisn}
+                      </td>
+                      <td
+                        onClick={() => {
+                          const s = students.find((st) => st.nisn === a.nisn);
+                          if (s) handleOpenStudentDetail(s);
+                        }}
+                        className="p-3 font-semibold text-slate-900 hover:text-blue-600 cursor-pointer"
+                        title="Klik untuk melihat profil lengkap siswa"
+                      >
+                        {a.nama}
+                      </td>
                       <td className="p-3 text-slate-600">{a.kelas}</td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeColor}`}>
@@ -371,6 +404,17 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                       <td className="p-3 font-medium text-slate-800">{a.status}</td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const s = students.find((st) => st.nisn === a.nisn);
+                              if (s) handleOpenStudentDetail(s);
+                            }}
+                            className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                            title="Lihat Profil & Histori Lengkap"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => openEditModal(a)}
@@ -522,6 +566,36 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Aesthetic Student Detail Modal */}
+      <StudentDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        student={selectedDetailStudent}
+        studentsList={students}
+        onSelectStudent={(s) => setSelectedDetailStudent(s)}
+        attendance={attendance}
+        config={
+          config || {
+            namaSekolah: 'e-Presensi Digital',
+            npsn: '-',
+            alamat: '-',
+            logoUrl: '',
+            jamMasukPagi: '07:00',
+            jamPulangPagi: '12:00',
+            jamMasukSiang: '12:30',
+            jamPulangSiang: '17:00',
+            toleransiTerlambatMenit: 15,
+            radiusMeter: 100,
+            lokasiLat: 0,
+            lokasiLng: 0,
+            kepalaSekolah: '',
+            nipKepalaSekolah: '',
+          }
+        }
+        teachers={teachers}
+        onShowNotice={onShowNotice}
+      />
     </div>
   );
 };

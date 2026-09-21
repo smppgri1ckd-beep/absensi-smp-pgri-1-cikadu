@@ -20,7 +20,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
-import { Student, AttendanceRecord, SchoolConfig } from './types';
+import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from './types';
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
@@ -102,6 +102,58 @@ export const SEED_STUDENTS: Student[] = [
   { nisn: "0071234510", nama: "Rian Kurniawan", jk: "L", kelas: "IX-A", fotoUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=200&q=80" },
   { nisn: "0071234511", nama: "Siti Nurhaliza", jk: "P", kelas: "IX-B", fotoUrl: "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=200&q=80" },
   { nisn: "0071234512", nama: "Yusuf Maulana", jk: "L", kelas: "IX-B", fotoUrl: "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=200&q=80" },
+];
+
+// Initial starter teacher accounts for instant testing
+export const SEED_TEACHERS: TeacherUser[] = [
+  {
+    id: "guru-001",
+    nip: "19800101 200501 1 001",
+    nama: "Budi Santoso, S.Pd.",
+    username: "budi.guru",
+    password: "guru12345",
+    mapel: "Matematika",
+    waliKelas: "VII-A",
+    kontak: "0812-3456-7891",
+    status: "AKTIF",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "guru-002",
+    nip: "19820202 200602 2 002",
+    nama: "Siti Rahmawati, M.Pd.",
+    username: "siti.guru",
+    password: "guru12345",
+    mapel: "Bahasa Indonesia",
+    waliKelas: "VII-B",
+    kontak: "0812-3456-7892",
+    status: "AKTIF",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "guru-003",
+    nip: "19840303 200703 1 003",
+    nama: "Ahmad Hidayat, S.Pd.",
+    username: "ahmad.guru",
+    password: "guru12345",
+    mapel: "Ilmu Pengetahuan Alam (IPA)",
+    waliKelas: "VIII-A",
+    kontak: "0812-3456-7893",
+    status: "AKTIF",
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: "guru-004",
+    nip: "19860404 200804 2 004",
+    nama: "Dewi Lestari, S.Pd.",
+    username: "dewi.guru",
+    password: "guru12345",
+    mapel: "Bahasa Inggris",
+    waliKelas: "IX-A",
+    kontak: "0812-3456-7894",
+    status: "AKTIF",
+    createdAt: new Date().toISOString(),
+  },
 ];
 
 export {

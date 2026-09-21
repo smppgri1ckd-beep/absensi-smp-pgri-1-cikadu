@@ -14,13 +14,18 @@ import {
   X,
   Upload,
   User,
+  Eye,
 } from 'lucide-react';
-import { Student } from '../types';
+import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from '../types';
 import { processImageFile } from '../utils/qr';
 import { exportStudentsToExcel } from '../utils/export';
+import { StudentDetailModal } from './StudentDetailModal';
 
 interface StudentMasterViewProps {
   students: Student[];
+  attendance?: AttendanceRecord[];
+  config?: SchoolConfig;
+  teachers?: TeacherUser[];
   onAddOrUpdateStudent: (student: Student, oldNisn?: string) => Promise<void>;
   onDeleteStudent: (nisn: string) => Promise<void>;
   onBatchDeleteStudents: (nisns: string[]) => Promise<void>;
@@ -31,6 +36,9 @@ interface StudentMasterViewProps {
 
 export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
   students,
+  attendance = [],
+  config,
+  teachers = [],
   onAddOrUpdateStudent,
   onDeleteStudent,
   onBatchDeleteStudents,
@@ -41,6 +49,15 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('ALL');
   const [selectedNisns, setSelectedNisns] = useState<string[]>([]);
+
+  // Student Detail Modal State
+  const [selectedDetailStudent, setSelectedDetailStudent] = useState<Student | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  const handleOpenDetail = (s: Student) => {
+    setSelectedDetailStudent(s);
+    setIsDetailModalOpen(true);
+  };
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -415,15 +432,29 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
                         <img
                           src={s.fotoUrl}
                           alt={s.nama}
-                          className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-white"
+                          onClick={() => handleOpenDetail(s)}
+                          className="w-8 h-8 rounded-full object-cover border border-slate-200 bg-white cursor-pointer hover:ring-2 hover:ring-blue-500 transition"
+                          title="Klik untuk melihat profil siswa"
                           onError={(e) => {
                             (e.currentTarget as HTMLImageElement).src =
                               'https://placehold.co/100x100/ffffff/64748b?text=Foto';
                           }}
                         />
                       </td>
-                      <td className="p-3 font-mono font-bold text-slate-900">{s.nisn}</td>
-                      <td className="p-3 font-semibold text-slate-900">{s.nama}</td>
+                      <td
+                        onClick={() => handleOpenDetail(s)}
+                        className="p-3 font-mono font-bold text-slate-900 cursor-pointer hover:text-blue-600 transition"
+                        title="Klik untuk melihat profil siswa"
+                      >
+                        {s.nisn}
+                      </td>
+                      <td
+                        onClick={() => handleOpenDetail(s)}
+                        className="p-3 font-semibold text-slate-900 cursor-pointer hover:text-blue-600 transition"
+                        title="Klik untuk melihat profil siswa"
+                      >
+                        {s.nama}
+                      </td>
                       <td className="p-3 text-slate-500">
                         {s.jk === 'L' ? 'Laki-laki' : 'Perempuan'}
                       </td>
@@ -434,6 +465,14 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
                       </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDetail(s)}
+                            className="p-1.5 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition"
+                            title="Lihat Profil & Histori Lengkap"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             type="button"
                             onClick={() => openEditModal(s)}
@@ -579,6 +618,36 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Aesthetic Student Detail Modal */}
+      <StudentDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        student={selectedDetailStudent}
+        studentsList={filtered}
+        onSelectStudent={(s) => setSelectedDetailStudent(s)}
+        attendance={attendance}
+        config={
+          config || {
+            namaSekolah: 'e-Presensi Digital',
+            npsn: '-',
+            alamat: '-',
+            logoUrl: '',
+            jamMasukPagi: '07:00',
+            jamPulangPagi: '12:00',
+            jamMasukSiang: '12:30',
+            jamPulangSiang: '17:00',
+            toleransiTerlambatMenit: 15,
+            radiusMeter: 100,
+            lokasiLat: 0,
+            lokasiLng: 0,
+            kepalaSekolah: '',
+            nipKepalaSekolah: '',
+          }
+        }
+        teachers={teachers}
+        onShowNotice={onShowNotice}
+      />
     </div>
   );
 };

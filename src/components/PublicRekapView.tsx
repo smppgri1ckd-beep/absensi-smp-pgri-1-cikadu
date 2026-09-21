@@ -15,14 +15,17 @@ import {
   Sparkles,
   Camera,
   RefreshCw,
+  Eye,
 } from 'lucide-react';
-import { Student, AttendanceRecord, SchoolConfig } from '../types';
+import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from '../types';
+import { StudentDetailModal } from './StudentDetailModal';
 
 interface PublicRekapViewProps {
   students: Student[];
   attendance: AttendanceRecord[];
   config: SchoolConfig;
   dayKey: string;
+  teachers?: TeacherUser[];
   onGoToKiosk: () => void;
   onOpenLogin: () => void;
 }
@@ -32,6 +35,7 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
   attendance,
   config,
   dayKey,
+  teachers = [],
   onGoToKiosk,
   onOpenLogin,
 }) => {
@@ -41,6 +45,15 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
   const [searchParentQuery, setSearchParentQuery] = useState<string>('');
   const [selectedStudentNisn, setSelectedStudentNisn] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
+
+  // Student Detail Modal state
+  const [selectedDetailStudent, setSelectedDetailStudent] = useState<Student | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  const handleOpenStudentDetail = (s: Student) => {
+    setSelectedDetailStudent(s);
+    setIsDetailModalOpen(true);
+  };
 
   // Daftar kelas unik
   const classes = useMemo(
@@ -288,9 +301,13 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
         {activeStudent && (
           <div className="bg-gradient-to-br from-blue-50/70 via-indigo-50/50 to-white border-2 border-blue-300 rounded-3xl p-5 sm:p-6 space-y-5 animate-scale-in">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-blue-100 pb-4">
-              <div className="flex items-center gap-3.5">
+              <div
+                onClick={() => handleOpenStudentDetail(activeStudent)}
+                className="flex items-center gap-3.5 cursor-pointer group"
+                title="Klik untuk membuka profil lengkap & kartu QR digital ananda"
+              >
                 <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black text-white shadow-md shrink-0 ${
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black text-white shadow-md shrink-0 group-hover:scale-105 transition-transform ${
                     activeStudent.jk === 'L'
                       ? 'bg-gradient-to-tr from-blue-600 to-indigo-600'
                       : 'bg-gradient-to-tr from-rose-500 to-pink-600'
@@ -315,8 +332,9 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
                       NISN: {activeStudent.nisn}
                     </span>
                   </div>
-                  <h4 className="text-base sm:text-lg font-black text-slate-900 mt-0.5">
+                  <h4 className="text-base sm:text-lg font-black text-slate-900 group-hover:text-blue-600 transition-colors mt-0.5 flex items-center gap-1.5">
                     {activeStudent.nama}
+                    <Eye className="w-4 h-4 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </h4>
                   <p className="text-[11px] text-slate-500">
                     Jenis Kelamin: {activeStudent.jk === 'L' ? 'Laki-Laki' : 'Perempuan'}
@@ -324,13 +342,23 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setSelectedStudentNisn(null)}
-                className="text-xs font-bold text-blue-600 hover:text-blue-800 bg-white border border-blue-200 px-3 py-1.5 rounded-xl self-start sm:self-center cursor-pointer shadow-2xs"
-              >
-                Tutup Kartu / Cari Siswa Lain
-              </button>
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => handleOpenStudentDetail(activeStudent)}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-100/80 hover:bg-blue-200/80 border border-blue-200 px-3 py-1.5 rounded-xl cursor-pointer shadow-2xs transition"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Detail & Kartu QR</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentNisn(null)}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 px-3 py-1.5 rounded-xl cursor-pointer shadow-2xs transition"
+                >
+                  Tutup
+                </button>
+              </div>
             </div>
 
             {/* STATUS KEHADIRAN HARI INI (SESI PAGI & SESI SIANG) */}
@@ -559,57 +587,89 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
                 <th className="py-2.5 px-3">Sesi</th>
                 <th className="py-2.5 px-3">Waktu (WIB)</th>
                 <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3 text-center">Profil</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredTableList.length > 0 ? (
-                filteredTableList.map((rec, idx) => (
-                  <tr key={rec.id} className="hover:bg-slate-50/80 transition">
-                    <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{rec.nisn}</td>
-                    <td className="py-2.5 px-3 font-bold text-slate-900">{rec.nama}</td>
-                    <td className="py-2.5 px-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700">
-                        {rec.kelas}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          rec.sesi === 'Pagi'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-emerald-100 text-emerald-700'
+                filteredTableList.map((rec, idx) => {
+                  const studentObj = students.find((s) => s.nisn === rec.nisn);
+                  return (
+                    <tr key={rec.id} className="hover:bg-slate-50/80 transition">
+                      <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                      <td
+                        onClick={() => studentObj && handleOpenStudentDetail(studentObj)}
+                        className={`py-2.5 px-3 font-mono font-bold ${
+                          studentObj ? 'text-slate-800 hover:text-blue-600 cursor-pointer' : 'text-slate-800'
                         }`}
+                        title={studentObj ? `Klik untuk melihat detail profil ${rec.nama}` : undefined}
                       >
-                        {rec.sesi}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
-                      {rec.waktu} WIB
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
-                          rec.status === 'Hadir Tepat Waktu'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : rec.status === 'Terlambat'
-                            ? 'bg-amber-100 text-amber-800'
-                            : rec.status === 'Pulang Tepat Waktu'
-                            ? 'bg-blue-100 text-blue-800'
-                            : rec.status === 'Pulang Mendahului'
-                            ? 'bg-orange-100 text-orange-800'
-                            : 'bg-slate-100 text-slate-800'
+                        {rec.nisn}
+                      </td>
+                      <td
+                        onClick={() => studentObj && handleOpenStudentDetail(studentObj)}
+                        className={`py-2.5 px-3 font-bold ${
+                          studentObj ? 'text-slate-900 hover:text-blue-600 cursor-pointer' : 'text-slate-900'
                         }`}
+                        title={studentObj ? `Klik untuk melihat detail profil ${rec.nama}` : undefined}
                       >
-                        <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
-                        {rec.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                        {rec.nama}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-100 text-slate-700">
+                          {rec.kelas}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            rec.sesi === 'Pagi'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-emerald-100 text-emerald-700'
+                          }`}
+                        >
+                          {rec.sesi}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
+                        {rec.waktu} WIB
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                            rec.status === 'Hadir Tepat Waktu'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : rec.status === 'Terlambat'
+                              ? 'bg-amber-100 text-amber-800'
+                              : rec.status === 'Pulang Tepat Waktu'
+                              ? 'bg-blue-100 text-blue-800'
+                              : rec.status === 'Pulang Mendahului'
+                              ? 'bg-orange-100 text-orange-800'
+                              : 'bg-slate-100 text-slate-800'
+                          }`}
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-current"></span>
+                          {rec.status}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        {studentObj && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenStudentDetail(studentObj)}
+                            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
+                            title={`Lihat Profil & Kartu ${rec.nama}`}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-400 text-xs">
+                  <td colSpan={8} className="text-center py-8 text-slate-400 text-xs">
                     Belum ada rekaman presensi pada filter tanggal {selectedDate}.
                   </td>
                 </tr>
@@ -618,6 +678,18 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Aesthetic Student Detail Modal */}
+      <StudentDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        student={selectedDetailStudent}
+        studentsList={students}
+        onSelectStudent={(s) => setSelectedDetailStudent(s)}
+        attendance={attendance}
+        config={config}
+        teachers={teachers}
+      />
     </div>
   );
 };

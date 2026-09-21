@@ -74,9 +74,23 @@ export interface SchoolConfig {
   schedule: ScheduleConfig;
 }
 
+export interface TeacherUser {
+  id: string;
+  nip: string;
+  nama: string;
+  username: string;
+  password: string;
+  mapel: string;
+  waliKelas?: string;
+  kontak?: string;
+  status: 'AKTIF' | 'NONAKTIF';
+  createdAt: string;
+}
+
 export interface UserSession {
-  role: 'ADMIN' | 'PESERTA' | null;
+  role: 'ADMIN' | 'GURU' | 'PESERTA' | null;
   name: string | null;
+  teacherData?: TeacherUser | null;
 }
 
 export type ViewType =
@@ -89,4 +103,7 @@ export type ViewType =
   | 'downloadQr'
   | 'kalenderHeb'
   | 'rekapPdf'
-  | 'pengaturan';
+  | 'pengaturan'
+  | 'kelolaGuru'
+  | 'portalGuru'
+  | 'guruIzinAbsen';
