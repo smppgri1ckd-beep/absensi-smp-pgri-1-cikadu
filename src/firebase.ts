@@ -23,7 +23,7 @@ import {
 import { Student, AttendanceRecord, SchoolConfig } from './types';
 
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDjXxuEJYYlr2YxobGnk7TU2BXATk1nmJM",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "presensi-siswa-digital-a24ca.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "presensi-siswa-digital-a24ca",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "presensi-siswa-digital-a24ca.firebasestorage.app",
@@ -36,13 +36,17 @@ let db: Firestore | null = null;
 let auth: Auth | null = null;
 
 try {
-  if (getApps().length === 0) {
-    app = initializeApp(firebaseConfig);
+  if (firebaseConfig.apiKey) {
+    if (getApps().length === 0) {
+      app = initializeApp(firebaseConfig);
+    } else {
+      app = getApp();
+    }
+    db = getFirestore(app);
+    auth = getAuth(app);
   } else {
-    app = getApp();
+    console.info('Firebase API key not set in environment. Running in offline/local storage mode.');
   }
-  db = getFirestore(app);
-  auth = getAuth(app);
 } catch (err) {
   console.warn('Firebase initialization error, fallback active:', err);
 }

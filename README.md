@@ -90,7 +90,7 @@ Aplikasi sudah dilengkapi konfigurasi bawaan yang siap pakai. Jika Anda ingin me
 1. Salin berkas `.env.example` menjadi `.env`
 2. Isi variabel dengan data dari Firebase Console (Project Settings &rarr; General &rarr; Your apps):
    ```env
-   VITE_FIREBASE_API_KEY="AIzaSy..."
+   VITE_FIREBASE_API_KEY="your-api-key"
    VITE_FIREBASE_AUTH_DOMAIN="proyek-anda.firebaseapp.com"
    VITE_FIREBASE_PROJECT_ID="proyek-anda"
    VITE_FIREBASE_STORAGE_BUCKET="proyek-anda.firebasestorage.app"
