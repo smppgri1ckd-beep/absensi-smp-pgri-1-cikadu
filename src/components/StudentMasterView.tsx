@@ -131,9 +131,7 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
         nama: formNama.trim(),
         jk: formJk,
         kelas: formKelas.trim().toUpperCase(),
-        fotoUrl:
-          formFotoPreview ||
-          'https://placehold.co/200x250/ffffff/64748b?text=Pas+Foto',
+        fotoUrl: formFotoPreview || '',
       };
 
       await onAddOrUpdateStudent(student, modalMode === 'EDIT' ? formOldNisn : undefined);
@@ -167,7 +165,7 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
             const nama = String(r[1]).trim();
             const jk = String(r[2] || 'L').toUpperCase().startsWith('P') ? 'P' : 'L';
             const kelas = String(r[3] || 'UMUM').trim().toUpperCase();
-            const fotoUrl = String(r[4] || 'https://placehold.co/200x250/ffffff/64748b?text=Pas+Foto');
+            const fotoUrl = r[4] ? String(r[4]).trim() : '';
 
             newStudents.push({ nisn, nama, jk, kelas, fotoUrl });
           }

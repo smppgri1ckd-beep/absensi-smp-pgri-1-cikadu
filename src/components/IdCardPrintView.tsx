@@ -9,6 +9,7 @@ import {
   CheckSquare,
   Square,
   QrCode,
+  User,
 } from 'lucide-react';
 import { Student, SchoolConfig } from '../types';
 import { generateQrDataUrl } from '../utils/qr';
@@ -360,29 +361,34 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                 >
                   {pageBatch.map((siswa) => {
                     const qrSrc = qrMap[siswa.nisn];
+                    const hasValidPhoto =
+                      Boolean(siswa.fotoUrl) &&
+                      siswa.fotoUrl.trim() !== '' &&
+                      !siswa.fotoUrl.includes('placehold.co') &&
+                      !siswa.fotoUrl.includes('placeholder');
 
                     return (
                       <div
                         key={siswa.nisn}
-                        className="bg-white border border-slate-300 rounded-xl overflow-hidden flex flex-col justify-between shadow-2xs relative select-none"
+                        className="student-id-card bg-white border border-slate-300 rounded-lg overflow-hidden flex flex-col justify-between shadow-2xs relative select-none"
                         style={{
                           width: paperSize === 'F4' ? '65mm' : '63mm',
-                          height: paperSize === 'F4' ? '100mm' : '90mm',
+                          height: paperSize === 'F4' ? '98mm' : '88mm',
                           boxSizing: 'border-box',
                         }}
                       >
                         {/* Card Header */}
-                        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-2 py-1.5 text-center flex items-center justify-center gap-1.5 shrink-0">
+                        <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white px-2 py-1 text-center flex items-center justify-center gap-1.5 shrink-0">
                           <img
                             src={config.logoUrl}
                             alt="Logo"
-                            className="w-5 h-5 object-contain bg-white rounded-md p-0.5"
+                            className="w-5 h-5 object-contain bg-white rounded p-0.5 shrink-0"
                             onError={(e) => {
                               (e.currentTarget as HTMLImageElement).src =
                                 'https://cdn-icons-png.flaticon.com/512/2856/2856000.png';
                             }}
                           />
-                          <div className="truncate text-left leading-tight">
+                          <div className="truncate text-left leading-tight min-w-0 flex-1">
                             <h5 className="text-[7.5px] font-black uppercase tracking-wide truncate">
                               {config.namaSekolah}
                             </h5>
@@ -399,19 +405,37 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                         </div>
 
                         {/* Student Details & Photo */}
-                        <div className="px-2 pt-1 flex items-center gap-2 shrink-0">
-                          <div className="w-10 h-12 rounded-lg border border-blue-900 overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                            <img
-                              src={siswa.fotoUrl}
-                              alt={siswa.nama}
-                              className="w-full h-full object-cover bg-white"
-                              onError={(e) => {
-                                (e.currentTarget as HTMLImageElement).src =
-                                  'https://placehold.co/100x120/ffffff/64748b?text=Foto';
-                              }}
-                            />
+                        <div className="px-2 pt-1 flex items-center gap-1.5 shrink-0">
+                          <div
+                            className="rounded border border-blue-900 overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center"
+                            style={{
+                              width: paperSize === 'F4' ? '18mm' : '16mm',
+                              height: paperSize === 'F4' ? '24mm' : '21mm',
+                              minWidth: paperSize === 'F4' ? '18mm' : '16mm',
+                              minHeight: paperSize === 'F4' ? '24mm' : '21mm',
+                              maxWidth: paperSize === 'F4' ? '18mm' : '16mm',
+                              maxHeight: paperSize === 'F4' ? '24mm' : '21mm',
+                            }}
+                          >
+                            {hasValidPhoto ? (
+                              <img
+                                src={siswa.fotoUrl}
+                                alt={siswa.nama}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-400 p-0.5 text-center">
+                                <User className="w-4 h-4 text-slate-300" />
+                                <span className="text-[4.5px] font-bold uppercase mt-0.5 leading-none text-slate-400">
+                                  Pas Foto
+                                </span>
+                              </div>
+                            )}
                           </div>
-                          <div className="overflow-hidden leading-tight flex-1">
+                          <div className="overflow-hidden leading-tight flex-1 min-w-0">
                             <p className="text-[5px] uppercase font-bold text-slate-400">
                               Nama Siswa:
                             </p>
@@ -428,27 +452,33 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                         </div>
 
                         {/* Integrated QR Code */}
-                        <div className="flex flex-col items-center justify-center my-auto py-0.5">
-                          <div className="p-1 bg-white border border-slate-200 rounded-xl shadow-inner flex items-center justify-center">
+                        <div className="flex flex-col items-center justify-center my-auto py-0.5 shrink-0">
+                          <div
+                            className="p-1 bg-white border border-slate-200 rounded-lg shadow-2xs flex items-center justify-center"
+                            style={{
+                              width: paperSize === 'F4' ? '28mm' : '25mm',
+                              height: paperSize === 'F4' ? '28mm' : '25mm',
+                            }}
+                          >
                             {qrSrc ? (
                               <img
                                 src={qrSrc}
                                 alt={`QR ${siswa.nisn}`}
-                                className="w-20 h-20 sm:w-22 sm:h-22 object-contain"
+                                className="w-full h-full object-contain"
                               />
                             ) : (
-                              <div className="w-20 h-20 flex items-center justify-center text-slate-300">
-                                <QrCode className="w-10 h-10 animate-pulse" />
+                              <div className="w-full h-full flex items-center justify-center text-slate-300">
+                                <QrCode className="w-6 h-6 animate-pulse" />
                               </div>
                             )}
                           </div>
-                          <span className="mt-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-extrabold text-[5.5px] tracking-wide uppercase">
+                          <span className="mt-0.5 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-extrabold text-[5px] tracking-wide uppercase">
                             PINDAI SESI PAGI &amp; SIANG
                           </span>
                         </div>
 
                         {/* Card Footer */}
-                        <div className="bg-blue-900 text-amber-300 text-center py-1 px-1 border-t border-amber-400 text-[5.5px] font-medium tracking-wide shrink-0">
+                        <div className="bg-blue-900 text-amber-300 text-center py-0.5 px-1 border-t border-amber-400 text-[5.5px] font-medium tracking-wide shrink-0">
                           Disiplin &bull; Karakter &bull; Berprestasi
                         </div>
                       </div>
