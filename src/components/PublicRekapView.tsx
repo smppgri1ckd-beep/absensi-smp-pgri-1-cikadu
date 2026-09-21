@@ -164,7 +164,7 @@ export const PublicRekapView: React.FC<PublicRekapViewProps> = ({
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+          <div className="no-print flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
             <button
               type="button"
               onClick={onGoToKiosk}

@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   FileSpreadsheet,
   FileText,
+  Printer,
   Calendar,
   Layers,
   ArrowUpRight,
@@ -14,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Student, AttendanceRecord, SchoolConfig } from '../types';
 import { exportRekapToExcel, exportRekapPDF } from '../utils/export';
+import { triggerDirectPrint } from '../utils/print';
 
 interface AdminDashboardProps {
   students: Student[];
@@ -117,10 +119,43 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
+  const handleDirectPrint = () => {
+    triggerDirectPrint({
+      paperSize: 'A4',
+      margins: '8mm 6mm',
+    });
+  };
+
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
+      {/* Print-Only Official Letterhead */}
+      <div className="hidden print:block border-b-2 border-slate-900 pb-3 mb-2">
+        <div className="flex items-center gap-4">
+          <img
+            src={config.logoUrl}
+            alt="Logo"
+            className="w-14 h-14 object-contain"
+            onError={(e) => {
+              (e.currentTarget as HTMLImageElement).src =
+                'https://cdn-icons-png.flaticon.com/512/2856/2856000.png';
+            }}
+          />
+          <div className="flex-1">
+            <h3 className="text-base font-black uppercase text-slate-900 leading-tight">
+              {config.namaSekolah}
+            </h3>
+            <p className="text-[10px] text-slate-700 font-medium">
+              {config.alamat} &bull; NPSN: {config.npsn}
+            </p>
+            <h4 className="text-xs font-bold text-slate-900 mt-1 uppercase">
+              Laporan Ringkasan Presensi Harian ({selectedDate})
+            </h4>
+          </div>
+        </div>
+      </div>
+
       {/* Header with Filter Controls and Quick Export */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="no-print bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -160,6 +195,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           >
             <FileText className="w-4 h-4" />
             <span>Export PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDirectPrint}
+            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Cetak Dokumen</span>
           </button>
         </div>
       </div>

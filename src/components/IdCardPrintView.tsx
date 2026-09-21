@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Student, SchoolConfig } from '../types';
 import { generateQrDataUrl } from '../utils/qr';
+import { triggerDirectPrint } from '../utils/print';
 import { jsPDF } from 'jspdf';
 
 interface IdCardPrintViewProps {
@@ -71,17 +72,11 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
 
   // Direct Printer execution without truncation
   const handleDirectPrint = () => {
-    // Apply print class matching chosen paper size
-    document.body.classList.remove('printing-idcard-f4', 'printing-idcard-a4', 'printing-rekap');
-    document.body.classList.add(paperSize === 'F4' ? 'printing-idcard-f4' : 'printing-idcard-a4');
-
-    setTimeout(() => {
-      window.print();
-    }, 250);
-
-    window.onafterprint = () => {
-      document.body.classList.remove('printing-idcard-f4', 'printing-idcard-a4');
-    };
+    triggerDirectPrint({
+      paperSize: paperSize === 'F4' ? 'F4' : 'A4',
+      margins: '0',
+      delayMs: 300,
+    });
   };
 
   // High-Resolution PDF Download
@@ -213,8 +208,8 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Action Header */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Action Header (Hidden on Direct Print) */}
+      <div className="no-print bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h3 className="text-base font-extrabold text-slate-900">
             Cetak Kartu Siswa Presisi (9 Kartu per Lembar 3x3)
@@ -273,8 +268,8 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
         </div>
       </div>
 
-      {/* Filter Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
+      {/* Filter Bar (Hidden on Direct Print) */}
+      <div className="no-print grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
         <div>
           <label className="block text-[10px] font-bold text-slate-500 mb-1">
             Filter Rombel / Kelas
@@ -328,8 +323,8 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
         </div>
       </div>
 
-      {/* Guide Note on Printer Margins */}
-      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+      {/* Guide Note on Printer Margins (Hidden on Direct Print) */}
+      <div className="no-print p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <div className="space-y-0.5">
           <p className="font-bold">
@@ -344,13 +339,13 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
       </div>
 
       {/* Live Visual Card Sheet Preview */}
-      <div className="p-4 sm:p-8 bg-slate-200/80 rounded-2xl border border-slate-300 overflow-x-auto flex flex-col items-center">
+      <div className="print-sheet-wrapper p-4 sm:p-8 bg-slate-200/80 rounded-2xl border border-slate-300 overflow-x-auto flex flex-col items-center">
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-slate-500 italic text-xs">
             Tidak ada data kartu siswa yang cocok dengan filter.
           </div>
         ) : (
-          <div ref={printContainerRef} className="space-y-8 flex flex-col items-center">
+          <div ref={printContainerRef} className="space-y-8 print:space-y-0 flex flex-col items-center">
             {Array.from({ length: totalPages }).map((_, pIdx) => {
               const pageBatch = filtered.slice(pIdx * cardsPerPage, (pIdx + 1) * cardsPerPage);
 
@@ -372,7 +367,7 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                         className="bg-white border border-slate-300 rounded-xl overflow-hidden flex flex-col justify-between shadow-2xs relative select-none"
                         style={{
                           width: paperSize === 'F4' ? '65mm' : '63mm',
-                          height: paperSize === 'F4' ? '100mm' : '93mm',
+                          height: paperSize === 'F4' ? '100mm' : '90mm',
                           boxSizing: 'border-box',
                         }}
                       >

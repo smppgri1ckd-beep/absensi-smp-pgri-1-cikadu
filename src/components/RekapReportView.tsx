@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Student, AttendanceRecord, SchoolConfig } from '../types';
 import { exportRekapToExcel, exportRekapPDF } from '../utils/export';
+import { triggerDirectPrint } from '../utils/print';
 
 interface RekapReportViewProps {
   students: Student[];
@@ -72,14 +73,10 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
   const targetSesi = Math.max(1, totalHeb * 2);
 
   const handleDirectPrint = () => {
-    document.body.classList.remove('printing-idcard-f4', 'printing-idcard-a4', 'printing-rekap');
-    document.body.classList.add('printing-rekap');
-    setTimeout(() => {
-      window.print();
-    }, 250);
-    window.onafterprint = () => {
-      document.body.classList.remove('printing-rekap');
-    };
+    triggerDirectPrint({
+      paperSize: 'A4',
+      margins: '8mm 6mm',
+    });
   };
 
   const handleExportPDF = () => {
@@ -111,8 +108,8 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Header (Hidden on Direct Print) */}
+      <div className="no-print bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h3 className="text-base font-extrabold text-slate-900">
             Rekapitulasi Kehadiran &amp; Laporan Resmi (A4)
@@ -145,13 +142,13 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
             className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <Printer className="w-4 h-4" />
-            <span>Cetak Dokumen</span>
+            <span>Cetak Dokumen (Printer Langsung)</span>
           </button>
         </div>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
+      {/* Filter Toolbar (Hidden on Direct Print) */}
+      <div className="no-print grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
         <div>
           <label className="block text-[10px] font-bold text-slate-600 mb-1">
             Pilih Periode
@@ -217,8 +214,8 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
         </div>
       </div>
 
-      {/* Signature Configuration Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs text-xs">
+      {/* Signature Configuration Bar (Hidden on Direct Print) */}
+      <div className="no-print grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs text-xs">
         <div>
           <label className="block text-[10px] font-bold text-slate-600 mb-1">
             Tanggal Pengesahan (Tanda Tangan)
@@ -264,7 +261,7 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
       </div>
 
       {/* Official A4 Sheet Preview */}
-      <div className="bg-slate-200/80 p-4 sm:p-8 rounded-2xl border border-slate-300 overflow-x-auto flex justify-center">
+      <div className="print-sheet-wrapper bg-slate-200/80 p-4 sm:p-8 rounded-2xl border border-slate-300 overflow-x-auto flex justify-center">
         <div
           id="rekapSheetWrapper"
           className="print-rekap-container w-[210mm] max-w-full bg-white text-slate-900 p-6 sm:p-9 shadow-lg rounded-sm space-y-4"
@@ -416,6 +413,16 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* Authentic Document Print Footer Note */}
+          <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-[8.5px] text-slate-500 no-break-inside font-medium">
+            <span>
+              Dokumen Resmi Sistem Presensi Digital &bull; {config.namaSekolah} &bull; NPSN: {config.npsn}
+            </span>
+            <span>
+              Dicetak Tanggal: {tglTtd} &bull; Sah &amp; Terverifikasi
+            </span>
           </div>
         </div>
       </div>
