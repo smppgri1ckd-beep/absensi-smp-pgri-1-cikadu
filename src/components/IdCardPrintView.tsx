@@ -17,7 +17,7 @@ import { Student, SchoolConfig } from '../types';
 import { generateQrDataUrl } from '../utils/qr';
 import { triggerDirectPrint } from '../utils/print';
 import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import { IdCardFront } from './IdCardFront';
 import { IdCardBack } from './IdCardBack';
 
@@ -229,62 +229,12 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
 
         if (pdfPageRef.current) {
           const canvas = await html2canvas(pdfPageRef.current, {
-            scale: 2.2, // ~220-250 DPI for razor sharp text & QR
+            scale: 2.2, // ~220-250 DPI for crisp text, borders & QR codes
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#ffffff',
             logging: false,
-            imageTimeout: 8000,
-            onclone: (clonedDoc) => {
-              // Tailwind CSS v4 emits modern color functions like oklch(...) which html2canvas cannot parse.
-              // We strip/replace all oklch occurrences across stylesheets, inline styles, and computed values in the clone.
-              try {
-                // 1. Remove all style elements in clonedDoc that contain oklch or sanitize them
-                const allStyleTags = clonedDoc.getElementsByTagName('style');
-                for (let i = allStyleTags.length - 1; i >= 0; i--) {
-                  const styleEl = allStyleTags[i];
-                  if (styleEl.innerHTML && styleEl.innerHTML.includes('oklch')) {
-                    styleEl.innerHTML = styleEl.innerHTML.replace(/oklch\([^)]+\)/gi, '#1e293b');
-                  }
-                }
-
-                // 2. Remove all link[rel="stylesheet"] to prevent external Tailwind CSS oklch rules from crashing html2canvas
-                const linkSheets = clonedDoc.querySelectorAll('link[rel="stylesheet"]');
-                linkSheets.forEach((link) => {
-                  link.remove();
-                });
-
-                // 3. Inject a fallback inline reset stylesheet into cloned document
-                const safeStyle = clonedDoc.createElement('style');
-                safeStyle.type = 'text/css';
-                safeStyle.innerHTML = `
-                  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-                  .id-card-page-f4 { width: 215mm !important; height: 330mm !important; display: grid !important; grid-template-columns: repeat(3, 65mm) !important; grid-template-rows: repeat(3, 98mm) !important; column-gap: 3.5mm !important; row-gap: 3.5mm !important; justify-content: center !important; background: #ffffff !important; box-sizing: border-box !important; padding: 6mm 5mm !important; }
-                  .id-card-page-a4 { width: 210mm !important; height: 297mm !important; display: grid !important; grid-template-columns: repeat(3, 63mm) !important; grid-template-rows: repeat(3, 88mm) !important; column-gap: 3mm !important; row-gap: 3mm !important; justify-content: center !important; background: #ffffff !important; box-sizing: border-box !important; padding: 5mm 5mm !important; }
-                  .student-id-card { background-color: #ffffff !important; border: 1px solid #cbd5e1 !important; border-radius: 16px !important; overflow: hidden !important; position: relative !important; display: flex !important; flex-direction: column !important; justify-content: space-between !important; }
-                `;
-                clonedDoc.head.appendChild(safeStyle);
-
-                // 4. Force solid RGB values on every cloned element
-                const elements = clonedDoc.querySelectorAll('*');
-                elements.forEach((node) => {
-                  if (node instanceof clonedDoc.defaultView!.HTMLElement) {
-                    try {
-                      // Strip oklch from inline style
-                      if (node.style.cssText && node.style.cssText.includes('oklch')) {
-                        node.style.cssText = node.style.cssText.replace(/oklch\([^)]+\)/gi, '#0f172a');
-                      }
-                      // Clear box-shadow if contains oklch
-                      if (node.style.boxShadow && node.style.boxShadow.includes('oklch')) {
-                        node.style.boxShadow = 'none';
-                      }
-                    } catch (_) {}
-                  }
-                });
-              } catch (err) {
-                console.warn('onclone error handler:', err);
-              }
-            },
+            imageTimeout: 10000,
           });
 
           const imgData = canvas.toDataURL('image/jpeg', 0.94);
@@ -704,8 +654,10 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
         <div
           style={{
             position: 'fixed',
-            left: '-99999px',
+            left: 0,
             top: 0,
+            width: paperSize === 'F4' ? '215mm' : '210mm',
+            minHeight: paperSize === 'F4' ? '330mm' : '297mm',
             zIndex: -9999,
             pointerEvents: 'none',
             overflow: 'hidden',
