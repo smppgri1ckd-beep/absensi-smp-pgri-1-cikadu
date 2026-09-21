@@ -81,6 +81,7 @@ export interface UserSession {
 
 export type ViewType =
   | 'kiosk'
+  | 'pantauPublik'
   | 'dashboard'
   | 'dataSiswa'
   | 'kelolaAbsensi'

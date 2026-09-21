@@ -38,6 +38,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       adminOnly: false,
     },
     {
+      id: 'pantauPublik',
+      label: 'Portal Pantau Ortu / Publik',
+      icon: <Users className="w-4 h-4 text-sky-600" />,
+      group: 'Operasional',
+      adminOnly: false,
+    },
+    {
       id: 'dashboard',
       label: 'Dashboard Admin Real-Time',
       icon: <LayoutDashboard className="w-4 h-4 text-indigo-600" />,

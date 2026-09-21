@@ -9,8 +9,10 @@ import {
   Calendar,
   Layers,
   ArrowRightLeft,
+  Camera,
+  Users,
 } from 'lucide-react';
-import { SchoolConfig, UserSession, AttendanceSession } from '../types';
+import { SchoolConfig, UserSession, AttendanceSession, ViewType } from '../types';
 
 interface NavbarProps {
   config: SchoolConfig;
@@ -18,6 +20,8 @@ interface NavbarProps {
   activeSession: AttendanceSession;
   timeString: string;
   dateString: string;
+  currentView: ViewType;
+  onSelectView: (view: ViewType) => void;
   onOpenLogin: () => void;
   onLogout: () => void;
   onShowWelcome: () => void;
@@ -32,6 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeSession,
   timeString,
   dateString,
+  currentView,
+  onSelectView,
   onOpenLogin,
   onLogout,
   onShowWelcome,
@@ -40,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onInstallPwa,
 }) => {
   return (
-    <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-slate-200 px-3 sm:px-5 py-2.5 flex items-center justify-between shadow-xs">
+    <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
       {/* School Brand */}
       <div className="flex items-center gap-2.5 sm:gap-3">
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 shadow-xs">
@@ -62,6 +68,36 @@ export const Navbar: React.FC<NavbarProps> = ({
             NPSN: {config.npsn} • Sistem Presensi Digital Terpadu
           </p>
         </div>
+      </div>
+
+      {/* Public Navigation Tabs (Scanner vs Pantau Ortu) */}
+      <div className="flex items-center p-1 bg-slate-100 rounded-2xl border border-slate-200">
+        <button
+          type="button"
+          onClick={() => onSelectView('kiosk')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+            currentView === 'kiosk'
+              ? 'bg-white text-blue-700 shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Camera className="w-3.5 h-3.5 text-blue-600" />
+          <span className="hidden sm:inline">Scanner Kiosk</span>
+          <span className="sm:hidden">Kiosk</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelectView('pantauPublik')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition cursor-pointer ${
+            currentView === 'pantauPublik'
+              ? 'bg-white text-indigo-700 shadow-2xs'
+              : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5 text-indigo-600" />
+          <span className="hidden sm:inline">Pantau Presensi (Ortu)</span>
+          <span className="sm:hidden">Pantau Ortu</span>
+        </button>
       </div>
 
       {/* Right Controls */}

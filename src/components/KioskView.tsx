@@ -13,6 +13,7 @@ import {
   Sparkles,
   ArrowRightLeft,
   Volume2,
+  Users,
 } from 'lucide-react';
 import { Student, AttendanceRecord, SchoolConfig, AttendanceSession } from '../types';
 import { playBeep } from '../utils/audio';
@@ -26,6 +27,7 @@ interface KioskViewProps {
   onRecordAttendance: (record: AttendanceRecord) => Promise<boolean>;
   onToggleSessionManual: () => void;
   dayKey: string;
+  onGoToPublicRekap?: () => void;
 }
 
 export const KioskView: React.FC<KioskViewProps> = ({
@@ -37,6 +39,7 @@ export const KioskView: React.FC<KioskViewProps> = ({
   onRecordAttendance,
   onToggleSessionManual,
   dayKey,
+  onGoToPublicRekap,
 }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [cameraMode, setCameraMode] = useState<'environment' | 'user'>('environment');
@@ -242,6 +245,16 @@ export const KioskView: React.FC<KioskViewProps> = ({
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
                 Sinkron Realtime
               </span>
+              {onGoToPublicRekap && (
+                <button
+                  type="button"
+                  onClick={onGoToPublicRekap}
+                  className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-400 text-slate-950 hover:bg-amber-300 flex items-center gap-1 shadow-xs transition active:scale-95 cursor-pointer ml-auto sm:ml-0"
+                >
+                  <Users className="w-3 h-3 text-slate-900" />
+                  <span>Portal Ortu: Pantau Kehadiran &rarr;</span>
+                </button>
+              )}
             </div>
             <h3 className="text-base sm:text-lg font-bold">
               Mode Kiosk Pemindaian QR Kartu Siswa

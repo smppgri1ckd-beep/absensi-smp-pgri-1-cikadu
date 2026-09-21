@@ -90,12 +90,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             />
           </div>
 
-          <div className="p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl text-[10px] text-slate-600 leading-relaxed">
-            <strong>Kredensial Default Portal:</strong><br />
-            &bull; Admin: <code className="font-mono text-blue-700">admin@absensi.id</code> / <code className="font-mono text-blue-700">edudigital</code><br />
-            &bull; Petugas Piket: <code className="font-mono text-blue-700">peserta</code> / <code className="font-mono text-blue-700">edudigital</code>
-          </div>
-
           <button
             type="submit"
             disabled={loading}

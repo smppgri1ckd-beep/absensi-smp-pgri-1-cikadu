@@ -37,6 +37,7 @@ import { QrDownloadView } from './components/QrDownloadView';
 import { CalendarHebView } from './components/CalendarHebView';
 import { RekapReportView } from './components/RekapReportView';
 import { SettingsView } from './components/SettingsView';
+import { PublicRekapView } from './components/PublicRekapView';
 import { WelcomeModal } from './components/WelcomeModal';
 import { LoginModal } from './components/LoginModal';
 import { NoticeModal, ConfirmModal } from './components/NoticeModal';
@@ -636,7 +637,7 @@ export default function App() {
   };
 
   const handleSelectView = (view: ViewType) => {
-    if (view !== 'kiosk' && userSession.role !== 'ADMIN') {
+    if (view !== 'kiosk' && view !== 'pantauPublik' && userSession.role !== 'ADMIN') {
       setIsLoginModalOpen(true);
       return;
     }
@@ -652,6 +653,8 @@ export default function App() {
         activeSession={computedSession}
         timeString={timeFormatted}
         dateString={dateFormatted}
+        currentView={currentView}
+        onSelectView={handleSelectView}
         onOpenLogin={() => setIsLoginModalOpen(true)}
         onLogout={handleLogout}
         onShowWelcome={() => setShowWelcome(true)}
@@ -684,6 +687,18 @@ export default function App() {
               onRecordAttendance={handleRecordAttendance}
               onToggleSessionManual={handleToggleSessionManual}
               dayKey={currentDayKey}
+              onGoToPublicRekap={() => setCurrentView('pantauPublik')}
+            />
+          )}
+
+          {currentView === 'pantauPublik' && (
+            <PublicRekapView
+              students={students}
+              attendance={attendance}
+              config={config}
+              dayKey={currentDayKey}
+              onGoToKiosk={() => setCurrentView('kiosk')}
+              onOpenLogin={() => setIsLoginModalOpen(true)}
             />
           )}
 
@@ -764,7 +779,14 @@ export default function App() {
 
       {/* Modals & Notifications */}
       {showWelcome && (
-        <WelcomeModal config={config} onEnter={() => setShowWelcome(false)} />
+        <WelcomeModal
+          config={config}
+          onEnter={() => setShowWelcome(false)}
+          onGoToMonitoring={() => {
+            setShowWelcome(false);
+            setCurrentView('pantauPublik');
+          }}
+        />
       )}
 
       <LoginModal

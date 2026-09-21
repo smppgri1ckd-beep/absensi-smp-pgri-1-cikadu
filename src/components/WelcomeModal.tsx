@@ -1,13 +1,18 @@
 import React from 'react';
-import { ArrowRight, CheckCircle2, QrCode } from 'lucide-react';
+import { ArrowRight, CheckCircle2, QrCode, Users } from 'lucide-react';
 import { SchoolConfig } from '../types';
 
 interface WelcomeModalProps {
   config: SchoolConfig;
   onEnter: () => void;
+  onGoToMonitoring?: () => void;
 }
 
-export const WelcomeModal: React.FC<WelcomeModalProps> = ({ config, onEnter }) => {
+export const WelcomeModal: React.FC<WelcomeModalProps> = ({
+  config,
+  onEnter,
+  onGoToMonitoring,
+}) => {
   const w = config.welcomeScreen;
 
   return (
@@ -43,20 +48,31 @@ export const WelcomeModal: React.FC<WelcomeModalProps> = ({ config, onEnter }) =
 
           <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-medium max-w-md mx-auto">
             {w.subtitle ||
-              'Portal presensi digital berbasis QR Code, pencatatan otomatis, rekapitulasi data akurat, dan cetak kartu siswa presisi.'}
+              'Portal presensi digital berbasis QR Code, pemantauan kehadiran oleh orang tua secara realtime, dan rekapitulasi data akurat.'}
           </p>
         </div>
 
-        {/* Action Button */}
-        <div className="pt-2">
+        {/* Action Buttons */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
           <button
             type="button"
             onClick={onEnter}
-            className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2.5 mx-auto transition-transform active:scale-95 cursor-pointer"
+            className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-700 hover:to-indigo-800 text-white rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transition-transform active:scale-95 cursor-pointer"
           >
-            <span>Buka Sistem Presensi</span>
+            <span>Buka Scanner Presensi</span>
             <ArrowRight className="w-4 h-4" />
           </button>
+
+          {onGoToMonitoring && (
+            <button
+              type="button"
+              onClick={onGoToMonitoring}
+              className="w-full sm:w-auto px-5 py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+            >
+              <Users className="w-4 h-4 text-indigo-600" />
+              <span>Pantau Kehadiran (Ortu)</span>
+            </button>
+          )}
         </div>
 
         <p className="text-[10px] text-slate-400 font-medium">
