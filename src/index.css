@@ -15,6 +15,45 @@
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+/* ID Card Sheet Screen & Base Layout */
+.id-card-page-f4 {
+  width: 215mm;
+  min-height: 330mm;
+  height: 330mm;
+  max-height: 330mm;
+  margin: 0 auto;
+  padding: 6mm 5mm;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(3, 65mm);
+  grid-template-rows: repeat(3, 98mm);
+  column-gap: 3.5mm;
+  row-gap: 3.5mm;
+  justify-content: center;
+  align-content: start;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.id-card-page-a4 {
+  width: 210mm;
+  min-height: 297mm;
+  height: 297mm;
+  max-height: 297mm;
+  margin: 0 auto;
+  padding: 5mm 5mm;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(3, 63mm);
+  grid-template-rows: repeat(3, 88mm);
+  column-gap: 3mm;
+  row-gap: 3mm;
+  justify-content: center;
+  align-content: start;
+  background: #ffffff;
+  overflow: hidden;
+}
+
 /* Print Media Styles - Precision Sizing to Prevent Clipping & Ensure Neat Layout */
 @media print {
   /* Hide non-print application UI and controls */
@@ -148,7 +187,16 @@
     break-inside: avoid !important;
     box-sizing: border-box !important;
     background: #ffffff !important;
-    border: 1px solid #94a3b8 !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .student-id-card svg {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Avoid extra blank page on the last batch */
