@@ -181,6 +181,59 @@
     border: none !important;
   }
 
+  /* ID Card Paired Sheet F4 (Folio 215mm x 330mm) - 3 pairs per sheet */
+  .id-card-page-pair-f4 {
+    width: 215mm !important;
+    height: 330mm !important;
+    max-height: 330mm !important;
+    margin: 0 auto !important;
+    padding: 6mm 6mm !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 4mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* ID Card Paired Sheet A4 (210mm x 297mm) - 3 pairs per sheet */
+  .id-card-page-pair-a4 {
+    width: 210mm !important;
+    height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 auto !important;
+    padding: 5mm 5mm !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+    gap: 3.5mm !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Avoid extra blank page on the last batch */
+  .id-card-page-f4:last-child,
+  .id-card-page-a4:last-child,
+  .id-card-page-pair-f4:last-child,
+  .id-card-page-pair-a4:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
   /* Specific ID Card Unit Guard */
   .student-id-card {
     page-break-inside: avoid !important;
@@ -199,13 +252,6 @@
     print-color-adjust: exact !important;
   }
 
-  /* Avoid extra blank page on the last batch */
-  .id-card-page-f4:last-child,
-  .id-card-page-a4:last-child {
-    page-break-after: auto !important;
-    break-after: auto !important;
-  }
-
   /* Rekap Document Container on Print */
   .print-rekap-container {
     width: 100% !important;
@@ -217,14 +263,21 @@
     background: #ffffff !important;
   }
 
-  /* Remove preview canvas styles */
-  .print-sheet-wrapper,
-  .print-sheet-wrapper > div {
+  /* Clean print sheet wrapper and mockup items on paper */
+  .print-sheet-wrapper {
     padding: 0 !important;
     margin: 0 !important;
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     width: 100% !important;
+  }
+
+  .mockup-item-container {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
   }
 }

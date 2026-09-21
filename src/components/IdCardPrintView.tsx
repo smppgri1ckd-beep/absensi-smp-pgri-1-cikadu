@@ -50,8 +50,10 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
   const [pdfProgressText, setPdfProgressText] = useState<string>('');
   const [currentStagingPage, setCurrentStagingPage] = useState<StagingPage | null>(null);
   const [showDownloadMenu, setShowDownloadMenu] = useState<boolean>(false);
+  const [showPrintMenu, setShowPrintMenu] = useState<boolean>(false);
   const printContainerRef = useRef<HTMLDivElement>(null);
   const downloadMenuRef = useRef<HTMLDivElement>(null);
+  const printMenuRef = useRef<HTMLDivElement>(null);
   const pdfPageRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -59,6 +61,9 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
     const handleClickOutside = (event: MouseEvent) => {
       if (downloadMenuRef.current && !downloadMenuRef.current.contains(event.target as Node)) {
         setShowDownloadMenu(false);
+      }
+      if (printMenuRef.current && !printMenuRef.current.contains(event.target as Node)) {
+        setShowPrintMenu(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -104,11 +109,24 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
   }, [filtered]);
 
   // Direct Printer execution
-  const handleDirectPrint = () => {
+  const handleDirectPrint = (targetSide?: CardSideMode) => {
+    setShowPrintMenu(false);
+    if (targetSide && targetSide !== cardSide) {
+      setCardSide(targetSide);
+      setTimeout(() => {
+        triggerDirectPrint({
+          paperSize: paperSize === 'F4' ? 'F4' : 'A4',
+          margins: '0',
+          delayMs: 350,
+        });
+      }, 150);
+      return;
+    }
+
     triggerDirectPrint({
       paperSize: paperSize === 'F4' ? 'F4' : 'A4',
       margins: '0',
-      delayMs: 300,
+      delayMs: 250,
     });
   };
 
@@ -315,10 +333,10 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Tampilkan Tampak Depan & Belakang berdampingan persis seperti desain mockup"
+              title="Tampilkan Tampak Depan & Belakang berdampingan (3 pasang kartu per lembar)"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Depan & Belakang (Sejajar)</span>
+              <span>Pasangan Sejajar (Siap Lipat)</span>
             </button>
             <button
               type="button"
@@ -328,9 +346,10 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
+              title="Cetak lembar tampak depan (9 kartu per lembar F4/A4)"
             >
               <CreditCard className="w-3.5 h-3.5" />
-              <span>Depan Saja</span>
+              <span>9 Kartu Depan</span>
             </button>
             <button
               type="button"
@@ -340,9 +359,10 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
+              title="Cetak lembar tampak belakang (9 panduan per lembar F4/A4)"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Belakang Saja</span>
+              <span>9 Kartu Belakang</span>
             </button>
             <button
               type="button"
@@ -352,7 +372,7 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
                   ? 'bg-blue-600 text-white shadow-xs'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
-              title="Cetak lembar ganjil Depan, genap Belakang (Siap Cetak Bolak-balik)"
+              title="Cetak lembar ganjil Depan, genap Belakang (Siap Cetak Bolak-balik 9 kartu/lembar)"
             >
               <Layers className="w-3.5 h-3.5" />
               <span>Cetak Duplex</span>
@@ -385,7 +405,86 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
             </button>
           </div>
 
-          {/* Action buttons */}
+          {/* Action buttons: Cetak Langsung (Printer) & Unduh PDF */}
+          <div className="relative" ref={printMenuRef}>
+            <div className="inline-flex rounded-xl shadow-xs">
+              <button
+                type="button"
+                onClick={() => handleDirectPrint()}
+                disabled={filtered.length === 0}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-l-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                title="Cetak kartu langsung ke printer fisik"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Cetak Printer</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowPrintMenu(!showPrintMenu)}
+                disabled={filtered.length === 0}
+                className="px-2 py-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white rounded-r-xl border-l border-blue-500 transition cursor-pointer"
+                title="Pilihan tata letak cetak langsung ke printer"
+              >
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {showPrintMenu && (
+              <div className="absolute right-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-30 py-1.5 text-xs text-slate-700 divide-y divide-slate-100 animate-in fade-in slide-in-from-top-2 duration-150">
+                <div className="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Pilihan Cetak Langsung (Kertas {paperSize})
+                </div>
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => handleDirectPrint('BOTH')}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <Layers className="w-4 h-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-slate-900 font-bold">Cetak Duplex (Bolak-Balik)</div>
+                      <div className="text-[10px] text-slate-500 font-normal">9 kartu/lembar, ganjil Depan, genap Belakang</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDirectPrint('FRONT')}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <CreditCard className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div>
+                      <div className="text-slate-900 font-bold">Tampak Depan Saja</div>
+                      <div className="text-[10px] text-slate-500 font-normal">9 kartu depan per lembar F4/A4</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDirectPrint('BACK')}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <BookOpen className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div>
+                      <div className="text-slate-900 font-bold">Tampak Belakang Saja</div>
+                      <div className="text-[10px] text-slate-500 font-normal">9 kartu panduan per lembar F4/A4</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDirectPrint('MOCKUP')}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 hover:text-blue-700 font-semibold flex items-center gap-2 cursor-pointer"
+                  >
+                    <LayoutGrid className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div>
+                      <div className="text-slate-900 font-bold">Pasangan Sejajar (Siap Lipat)</div>
+                      <div className="text-[10px] text-slate-500 font-normal">3 pasang kartu (depan & belakang) per lembar</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Unduh PDF Button with dropdown */}
           <div className="relative" ref={downloadMenuRef}>
             <div className="inline-flex rounded-xl shadow-xs">
               <button
@@ -467,16 +566,6 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
               </div>
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={handleDirectPrint}
-            disabled={filtered.length === 0}
-            className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-          >
-            <Printer className="w-4 h-4" />
-            <span>Cetak Printer</span>
-          </button>
         </div>
       </div>
 
@@ -540,106 +629,149 @@ export const IdCardPrintView: React.FC<IdCardPrintViewProps> = ({
         <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
         <div className="space-y-0.5">
           <p className="font-bold">
-            Panduan Desain & Pencetakan:
+            Panduan Cetak Langsung (Printer Fisik) & Tata Letak:
           </p>
           <p className="text-slate-700 leading-relaxed text-[11px]">
-            • Mode <strong>Depan & Belakang (Sejajar)</strong> menampilkan mockup persis seperti gambar acuan Anda (Tampak Depan dan Belakang bersandingan).<br />
-            • Mode <strong>Depan Saja</strong> / <strong>Belakang Saja</strong> / <strong>Cetak Duplex</strong> menata 9 kartu per lembar pas pada kertas F4 / A4 untuk cetak printer langsung.
+            • Mode <strong>Pasangan Sejajar (Siap Lipat)</strong>: Menata 3 pasang kartu (Depan & Belakang berdampingan) per lembar kertas {paperSize} dengan garis bantu lipat & potong.<br />
+            • Mode <strong>9 Kartu Depan / Belakang / Duplex</strong>: Menata 9 kartu per lembar kertas {paperSize} secara presisi tanpa margin berlebih untuk efisiensi kertas maksimal.<br />
+            • Seluruh elemen pratinjau antarmuka (nama siswa, tombol, lencana indikator, dan bingkai layar) otomatis <strong>dihilangkan</strong> saat mencetak langsung agar hasil cetakan di kertas bersih dan rapi.
           </p>
         </div>
       </div>
 
       {/* Live Visual Card Preview */}
-      <div className="print-sheet-wrapper p-4 sm:p-8 bg-slate-200/80 rounded-2xl border border-slate-300 overflow-x-auto flex flex-col items-center">
+      <div className="print-sheet-wrapper p-4 sm:p-8 print:p-0 bg-slate-200/80 print:bg-transparent rounded-2xl print:rounded-none border border-slate-300 print:border-none overflow-x-auto flex flex-col items-center w-full">
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-slate-500 italic text-xs">
             Tidak ada data kartu siswa yang cocok dengan filter.
           </div>
         ) : cardSide === 'MOCKUP' ? (
-          /* ===== MOCKUP VIEW: Tampak Depan & Belakang Side-by-Side matching reference image ===== */
-          <div className="space-y-10 flex flex-col items-center">
-            {filtered.map((siswa) => (
-              <div
-                key={`mockup-${siswa.nisn}`}
-                className="bg-slate-100/90 p-4 sm:p-6 rounded-3xl border border-slate-300 shadow-sm flex flex-col items-center gap-4"
-              >
-                <div className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                  <span>Pratinjau Kartu Siswa:</span>
-                  <span className="bg-blue-600 text-white px-2.5 py-0.5 rounded-md font-extrabold">
-                    {siswa.nama} ({siswa.nisn}) - Kelas {siswa.kelas}
-                  </span>
-                </div>
+          /* ===== MOCKUP VIEW: 3 PAIRS PER PRINT SHEET (FRONT & BACK SIDE-BY-SIDE) ===== */
+          <div className="space-y-8 print:space-y-0 flex flex-col items-center w-full">
+            {Array.from({ length: Math.ceil(filtered.length / 3) }).map((_, pageIdx) => {
+              const pairBatch = filtered.slice(pageIdx * 3, (pageIdx + 1) * 3);
+              const pageClass =
+                paperSize === 'F4'
+                  ? 'id-card-page-pair-f4 shadow-lg print:shadow-none rounded-xl print:rounded-none bg-white p-4 print:p-0'
+                  : 'id-card-page-pair-a4 shadow-lg print:shadow-none rounded-xl print:rounded-none bg-white p-4 print:p-0';
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-8">
-                  {/* Tampak Depan Card */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="shadow-lg rounded-2xl bg-white transition hover:shadow-xl">
-                      <IdCardFront
-                        student={siswa}
-                        config={config}
-                        qrDataUrl={qrMap[siswa.nisn]}
-                        paperSize={paperSize}
-                      />
-                    </div>
-                    <span className="bg-slate-600 text-white text-[11px] font-bold px-3 py-0.5 rounded-full shadow-2xs">
-                      Tampak Depan (10,5 × 6,5 cm)
+              return (
+                <div key={`pair-page-${pageIdx}`} className={pageClass}>
+                  {/* On-screen page indicator - HIDDEN ON PRINT */}
+                  <div className="no-print w-full flex items-center justify-between pb-2 mb-2 border-b border-slate-200 text-[11px] font-bold text-slate-500">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-blue-600 inline-block" />
+                      Lembar Pasangan {pageIdx + 1} dari {Math.ceil(filtered.length / 3)}
+                    </span>
+                    <span className="text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md font-semibold">
+                      {pairBatch.length} Siswa ({pairBatch.length * 2} Kartu)
                     </span>
                   </div>
 
-                  {/* Tampak Belakang Card */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="shadow-lg rounded-2xl bg-white transition hover:shadow-xl">
-                      <IdCardBack
-                        config={config}
-                        paperSize={paperSize}
-                      />
-                    </div>
-                    <span className="bg-slate-600 text-white text-[11px] font-bold px-3 py-0.5 rounded-full shadow-2xs">
-                      Tampak Belakang (10,5 × 6,5 cm)
-                    </span>
+                  <div className="flex flex-col items-center gap-4 print:gap-3 w-full">
+                    {pairBatch.map((siswa) => (
+                      <div
+                        key={`mockup-${siswa.nisn}`}
+                        className="mockup-item-container bg-slate-100/90 print:bg-transparent p-3 sm:p-4 print:p-0 rounded-2xl print:rounded-none border border-slate-300 print:border-none shadow-xs print:shadow-none flex flex-col items-center gap-2 print:gap-0 w-full print:w-auto"
+                      >
+                        {/* Student Name Header - HIDDEN ON PRINT */}
+                        <div className="no-print text-xs font-bold text-slate-700 flex items-center gap-2">
+                          <span>Pratinjau Kartu Siswa:</span>
+                          <span className="bg-blue-600 text-white px-2.5 py-0.5 rounded-md font-extrabold">
+                            {siswa.nama} ({siswa.nisn}) - Kelas {siswa.kelas}
+                          </span>
+                        </div>
+
+                        {/* Front and Back Pair Container */}
+                        <div className="flex flex-row items-center justify-center gap-3 sm:gap-6 print:gap-2">
+                          {/* Tampak Depan Card */}
+                          <div className="flex flex-col items-center gap-1.5 print:gap-0">
+                            <div className="shadow-lg print:shadow-none rounded-2xl bg-white">
+                              <IdCardFront
+                                student={siswa}
+                                config={config}
+                                qrDataUrl={qrMap[siswa.nisn]}
+                                paperSize={paperSize}
+                              />
+                            </div>
+                            <span className="no-print bg-slate-600 text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow-2xs">
+                              Tampak Depan (10,5 × 6,5 cm)
+                            </span>
+                          </div>
+
+                          {/* Subtle Print Fold / Cut Guide Line */}
+                          <div className="hidden print:block w-[1px] h-[80mm] border-r border-dashed border-slate-300 mx-1 shrink-0" />
+
+                          {/* Tampak Belakang Card */}
+                          <div className="flex flex-col items-center gap-1.5 print:gap-0">
+                            <div className="shadow-lg print:shadow-none rounded-2xl bg-white">
+                              <IdCardBack
+                                config={config}
+                                paperSize={paperSize}
+                              />
+                            </div>
+                            <span className="no-print bg-slate-600 text-white text-[10px] font-bold px-3 py-0.5 rounded-full shadow-2xs">
+                              Tampak Belakang (10,5 × 6,5 cm)
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           /* ===== 3x3 SHEET VIEW FOR PRINTER (FRONT, BACK, OR DUPLEX) ===== */
-          <div ref={printContainerRef} className="space-y-8 print:space-y-0 flex flex-col items-center">
+          <div ref={printContainerRef} className="space-y-8 print:space-y-0 flex flex-col items-center w-full">
             {Array.from({ length: totalPages }).map((_, pIdx) => {
               const pageBatch = filtered.slice(pIdx * cardsPerPage, (pIdx + 1) * cardsPerPage);
 
               const pageClass =
                 paperSize === 'F4'
-                  ? 'id-card-page-f4 shadow-lg rounded-sm bg-white'
-                  : 'id-card-page-a4 shadow-lg rounded-sm bg-white';
+                  ? 'id-card-page-f4 shadow-lg print:shadow-none rounded-sm print:rounded-none bg-white'
+                  : 'id-card-page-a4 shadow-lg print:shadow-none rounded-sm print:rounded-none bg-white';
 
               return (
                 <React.Fragment key={pIdx}>
                   {/* Page: Tampak Depan */}
                   {(cardSide === 'FRONT' || cardSide === 'BOTH') && (
-                    <div className={pageClass}>
-                      {pageBatch.map((siswa) => (
-                        <IdCardFront
-                          key={`front-${siswa.nisn}`}
-                          student={siswa}
-                          config={config}
-                          qrDataUrl={qrMap[siswa.nisn]}
-                          paperSize={paperSize}
-                        />
-                      ))}
+                    <div className="flex flex-col items-center w-full">
+                      {/* On-screen Page Badge - HIDDEN ON PRINT */}
+                      <div className="no-print mb-2 text-xs font-bold text-slate-600 bg-white/90 px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                        Lembar Depan {pIdx + 1} dari {totalPages} ({pageBatch.length} Kartu)
+                      </div>
+                      <div className={pageClass}>
+                        {pageBatch.map((siswa) => (
+                          <IdCardFront
+                            key={`front-${siswa.nisn}`}
+                            student={siswa}
+                            config={config}
+                            qrDataUrl={qrMap[siswa.nisn]}
+                            paperSize={paperSize}
+                          />
+                        ))}
+                      </div>
                     </div>
                   )}
 
                   {/* Page: Tampak Belakang */}
                   {(cardSide === 'BACK' || cardSide === 'BOTH') && (
-                    <div className={pageClass}>
-                      {pageBatch.map((siswa) => (
-                        <IdCardBack
-                          key={`back-${siswa.nisn}`}
-                          config={config}
-                          paperSize={paperSize}
-                        />
-                      ))}
+                    <div className="flex flex-col items-center w-full">
+                      {/* On-screen Page Badge - HIDDEN ON PRINT */}
+                      <div className="no-print mb-2 text-xs font-bold text-slate-600 bg-white/90 px-3 py-1 rounded-full border border-slate-200 shadow-2xs">
+                        Lembar Belakang {pIdx + 1} dari {totalPages} ({pageBatch.length} Kartu)
+                      </div>
+                      <div className={pageClass}>
+                        {pageBatch.map((siswa) => (
+                          <IdCardBack
+                            key={`back-${siswa.nisn}`}
+                            config={config}
+                            paperSize={paperSize}
+                          />
+                        ))}
+                      </div>
                     </div>
                   )}
                 </React.Fragment>
