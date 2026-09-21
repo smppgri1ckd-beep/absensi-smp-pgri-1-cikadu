@@ -457,16 +457,21 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">
-                    Waktu (Jam:Menit:Detik)
+                    Waktu (24 Jam WIB - JJ:MM:DD)
                   </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="07:00:00"
-                    value={formWaktu}
-                    onChange={(e) => setFormWaktu(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-hidden"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      placeholder="07:15:00"
+                      value={formWaktu}
+                      onChange={(e) => setFormWaktu(e.target.value)}
+                      className="w-full pl-3 pr-12 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-hidden"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs font-bold text-slate-400 select-none">
+                      WIB
+                    </span>
+                  </div>
                 </div>
               </div>
 

@@ -18,6 +18,7 @@ import {
 import { SchoolConfig, AttendanceRecord } from '../types';
 import { processImageFile } from '../utils/qr';
 import { playBeep } from '../utils/audio';
+import { TimeInput24 } from './TimeInput24';
 
 interface SettingsViewProps {
   config: SchoolConfig;
@@ -178,63 +179,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                    Jam Mulai Sesi
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.schedule.morningStart}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        schedule: { ...formData.schedule, morningStart: e.target.value },
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:outline-hidden"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <TimeInput24
+                  id="morning-start-time"
+                  label="Jam Mulai Sesi"
+                  value={formData.schedule.morningStart}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      schedule: { ...formData.schedule, morningStart: val },
+                    })
+                  }
+                  presets={['06:00', '06:30']}
+                />
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                    Batas Tepat Waktu
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.schedule.morningOnTimeEnd}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        schedule: { ...formData.schedule, morningOnTimeEnd: e.target.value },
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:outline-hidden"
-                  />
-                </div>
+                <TimeInput24
+                  id="morning-ontime-time"
+                  label="Batas Tepat Waktu"
+                  value={formData.schedule.morningOnTimeEnd}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      schedule: { ...formData.schedule, morningOnTimeEnd: val },
+                    })
+                  }
+                  presets={['07:00', '07:15']}
+                />
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                    Batas Akhir Sesi
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.schedule.morningCutoff}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        schedule: { ...formData.schedule, morningCutoff: e.target.value },
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:outline-hidden"
-                  />
-                </div>
+                <TimeInput24
+                  id="morning-cutoff-time"
+                  label="Batas Akhir Sesi"
+                  value={formData.schedule.morningCutoff}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      schedule: { ...formData.schedule, morningCutoff: val },
+                    })
+                  }
+                  presets={['11:00', '11:30']}
+                />
               </div>
               <p className="text-[10px] text-slate-500 italic">
-                Lewat dari batas tepat waktu ({formData.schedule.morningOnTimeEnd}) akan tercatat sebagai status <strong>"Terlambat"</strong>.
+                Format 24 Jam (WIB). Lewat dari batas tepat waktu (<strong>{formData.schedule.morningOnTimeEnd} WIB</strong>) akan otomatis tercatat sebagai status <strong>"Terlambat"</strong>.
               </p>
             </div>
 
@@ -249,63 +235,48 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-xs">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                    Jam Mulai Sesi
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.schedule.afternoonStart}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        schedule: { ...formData.schedule, afternoonStart: e.target.value },
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:outline-hidden"
-                  />
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <TimeInput24
+                  id="afternoon-start-time"
+                  label="Jam Mulai Sesi"
+                  value={formData.schedule.afternoonStart}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      schedule: { ...formData.schedule, afternoonStart: val },
+                    })
+                  }
+                  presets={['12:30', '13:00']}
+                />
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                    Batas Pulang Standar
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.schedule.afternoonOnTimeEnd}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        schedule: { ...formData.schedule, afternoonOnTimeEnd: e.target.value },
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:outline-hidden"
-                  />
-                </div>
+                <TimeInput24
+                  id="afternoon-ontime-time"
+                  label="Batas Pulang Standar"
+                  value={formData.schedule.afternoonOnTimeEnd}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      schedule: { ...formData.schedule, afternoonOnTimeEnd: val },
+                    })
+                  }
+                  presets={['14:00', '15:00']}
+                />
 
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-600 mb-1">
-                    Batas Akhir Sesi
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={formData.schedule.afternoonCutoff}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        schedule: { ...formData.schedule, afternoonCutoff: e.target.value },
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono focus:outline-hidden"
-                  />
-                </div>
+                <TimeInput24
+                  id="afternoon-cutoff-time"
+                  label="Batas Akhir Sesi"
+                  value={formData.schedule.afternoonCutoff}
+                  onChange={(val) =>
+                    setFormData({
+                      ...formData,
+                      schedule: { ...formData.schedule, afternoonCutoff: val },
+                    })
+                  }
+                  presets={['16:00', '17:00']}
+                />
               </div>
               <p className="text-[10px] text-slate-500 italic">
-                Presensi sebelum batas jam pulang ({formData.schedule.afternoonOnTimeEnd}) akan tercatat sebagai status <strong>"Pulang Mendahului"</strong>.
+                Format 24 Jam (WIB). Presensi sebelum batas jam pulang (<strong>{formData.schedule.afternoonOnTimeEnd} WIB</strong>) akan tercatat sebagai status <strong>"Pulang Mendahului"</strong>.
               </p>
             </div>
 
