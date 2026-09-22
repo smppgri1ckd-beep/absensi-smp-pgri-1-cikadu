@@ -14,6 +14,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { Student, AttendanceRecord, AttendanceSession, AttendanceStatus, SchoolConfig, TeacherUser } from '../types';
+import { DEFAULT_SCHOOL_CONFIG } from '../firebase';
 import { StudentDetailModal } from './StudentDetailModal';
 
 interface AttendanceManageViewProps {
@@ -575,24 +576,7 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
         studentsList={students}
         onSelectStudent={(s) => setSelectedDetailStudent(s)}
         attendance={attendance}
-        config={
-          config || {
-            namaSekolah: 'e-Presensi Digital',
-            npsn: '-',
-            alamat: '-',
-            logoUrl: '',
-            jamMasukPagi: '07:00',
-            jamPulangPagi: '12:00',
-            jamMasukSiang: '12:30',
-            jamPulangSiang: '17:00',
-            toleransiTerlambatMenit: 15,
-            radiusMeter: 100,
-            lokasiLat: 0,
-            lokasiLng: 0,
-            kepalaSekolah: '',
-            nipKepalaSekolah: '',
-          }
-        }
+        config={config || DEFAULT_SCHOOL_CONFIG}
         teachers={teachers}
         onShowNotice={onShowNotice}
       />

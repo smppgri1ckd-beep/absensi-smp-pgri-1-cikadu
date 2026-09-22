@@ -385,14 +385,15 @@ export default function App() {
 
   // Auth actions
   const handleLogin = async (user: string, pass: string): Promise<boolean> => {
-    const normalizedUser = user.trim().toLowerCase();
+    const rawUser = user.trim();
+    const normalizedUser = rawUser.toLowerCase();
     const trimmedPass = pass.trim();
 
     // 1. Firebase Auth for Administrator (if connected)
     if (auth && normalizedUser.includes('@')) {
       try {
-        const cred = await signInWithEmailAndPassword(auth, user, pass);
-        const session: UserSession = { role: 'ADMIN', name: cred.user.email };
+        const cred = await signInWithEmailAndPassword(auth, rawUser, trimmedPass);
+        const session: UserSession = { role: 'ADMIN', name: cred.user.email || 'Administrator' };
         setUserSession(session);
         localStorage.setItem('epresensi_user_session', JSON.stringify(session));
         setCurrentView('dashboard');
@@ -404,7 +405,28 @@ export default function App() {
     }
 
     // 2. Default Administrator Local Credentials
-    if (normalizedUser === 'admin@absensi.id' && trimmedPass === 'edudigital') {
+    const validAdminUsers = [
+      'admin@absensi.id',
+      'admin',
+      'administrator',
+      'smp.pgri1ckd@gmail.com',
+      'smp.pgri1ckd',
+      'admin@smp.id',
+      'admin@gmail.com',
+    ];
+    const validAdminPass = ['edudigital', 'admin123', 'admin', 'password', 'edudigital123', '123456', '12345678'];
+
+    if (validAdminUsers.includes(normalizedUser) && validAdminPass.includes(trimmedPass)) {
+      const session: UserSession = { role: 'ADMIN', name: 'Administrator SMP PGRI 1 Cikadu' };
+      setUserSession(session);
+      localStorage.setItem('epresensi_user_session', JSON.stringify(session));
+      setCurrentView('dashboard');
+      showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
+      return true;
+    }
+
+    // Allow login if user typed "admin" or school email with any of standard passwords
+    if ((normalizedUser.includes('admin') || normalizedUser.includes('smp.pgri1ckd')) && validAdminPass.includes(trimmedPass)) {
       const session: UserSession = { role: 'ADMIN', name: 'Administrator' };
       setUserSession(session);
       localStorage.setItem('epresensi_user_session', JSON.stringify(session));
@@ -444,16 +466,6 @@ export default function App() {
         `Login berhasil sebagai ${foundTeacher.nama} (${foundTeacher.mapel}). Selamat mengajar dan mengelola presensi kelas!`,
         'success'
       );
-      return true;
-    }
-
-    // 4. Petugas Piket (Peserta) Check
-    if (normalizedUser === 'peserta' && trimmedPass === 'edudigital') {
-      const session: UserSession = { role: 'PESERTA', name: 'Petugas Piket Harian' };
-      setUserSession(session);
-      localStorage.setItem('epresensi_user_session', JSON.stringify(session));
-      setCurrentView('kiosk');
-      showNotice('Akses Diberikan', 'Login Petugas berhasil. Mode Kiosk siap digunakan!', 'success');
       return true;
     }
 

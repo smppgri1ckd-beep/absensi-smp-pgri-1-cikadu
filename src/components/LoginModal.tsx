@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, X, GraduationCap, UserCheck, KeyRound, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { ShieldCheck, X, GraduationCap, Eye, EyeOff } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -14,7 +14,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onLogin,
   onShowNotice,
 }) => {
-  const [roleTab, setRoleTab] = useState<'GURU' | 'ADMIN' | 'PIKET'>('GURU');
+  const [roleTab, setRoleTab] = useState<'GURU' | 'ADMIN'>('GURU');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -40,23 +40,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     } else {
       onShowNotice(
         'Login Gagal',
-        'Username / Email atau kata sandi tidak cocok, atau akun dinonaktifkan oleh Administrator.',
+        'Username / Email atau kata sandi tidak cocok. Silakan periksa kembali.',
         'warning'
       );
-    }
-  };
-
-  const handleQuickDemo = (role: 'GURU' | 'ADMIN' | 'PIKET') => {
-    setRoleTab(role);
-    if (role === 'GURU') {
-      setUsername('budi.guru');
-      setPassword('guru12345');
-    } else if (role === 'ADMIN') {
-      setUsername('admin@absensi.id');
-      setPassword('edudigital');
-    } else {
-      setUsername('peserta');
-      setPassword('edudigital');
     }
   };
 
@@ -72,114 +58,62 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+            className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Role Selector Tabs */}
-        <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-2xl text-[11px] font-bold">
+        {/* Role Selector Tabs (Hanya Guru & Admin) */}
+        <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl text-xs font-bold">
           <button
             type="button"
             onClick={() => {
               setRoleTab('GURU');
-              if (username === 'admin@absensi.id' || username === 'peserta') {
-                setUsername('');
-                setPassword('');
-              }
+              setUsername('');
+              setPassword('');
             }}
-            className={`py-1.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 ${
+            className={`py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
               roleTab === 'GURU'
-                ? 'bg-white text-emerald-700 shadow-2xs font-extrabold'
+                ? 'bg-white text-emerald-700 shadow-2xs font-extrabold ring-1 ring-emerald-500/20'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Guru</span>
+            <GraduationCap className="w-4 h-4 text-emerald-600" />
+            <span>Guru / Wali</span>
           </button>
 
           <button
             type="button"
             onClick={() => {
               setRoleTab('ADMIN');
-              if (username === 'budi.guru' || username === 'peserta') {
-                setUsername('');
-                setPassword('');
-              }
+              setUsername('');
+              setPassword('');
             }}
-            className={`py-1.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 ${
+            className={`py-2 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5 ${
               roleTab === 'ADMIN'
-                ? 'bg-white text-blue-700 shadow-2xs font-extrabold'
+                ? 'bg-white text-blue-700 shadow-2xs font-extrabold ring-1 ring-blue-500/20'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+            <ShieldCheck className="w-4 h-4 text-blue-600" />
             <span>Admin</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setRoleTab('PIKET');
-              if (username === 'admin@absensi.id' || username === 'budi.guru') {
-                setUsername('');
-                setPassword('');
-              }
-            }}
-            className={`py-1.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1 ${
-              roleTab === 'PIKET'
-                ? 'bg-white text-amber-700 shadow-2xs font-extrabold'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-            <span>Piket</span>
-          </button>
-        </div>
-
-        {/* Role Helper description */}
-        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 leading-snug">
-          {roleTab === 'GURU' && (
-            <p>
-              Masuk sebagai <strong className="text-slate-900">Guru Pengajar / Wali Kelas</strong> untuk mencatat izin/sakit, cek presensi kelas, dan rekap tatap muka. Akun dibuat oleh Administrator.
-            </p>
-          )}
-          {roleTab === 'ADMIN' && (
-            <p>
-              Masuk sebagai <strong className="text-slate-900">Administrator Sekolah</strong> untuk akses penuh database siswa, akun guru, dan pengaturan sistem.
-            </p>
-          )}
-          {roleTab === 'PIKET' && (
-            <p>
-              Masuk sebagai <strong className="text-slate-900">Petugas Piket</strong> untuk memantau scanner Kiosk secara mandiri.
-            </p>
-          )}
         </div>
 
         {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs pt-1">
           <div>
             <label className="block text-slate-700 font-bold mb-1">
-              {roleTab === 'ADMIN'
-                ? 'Email Administrator'
-                : roleTab === 'GURU'
-                ? 'Username atau NIP Guru'
-                : 'Username Petugas'}
+              {roleTab === 'ADMIN' ? 'Username / Email Administrator' : 'Username / NIP Guru'}
             </label>
             <input
               type="text"
               required
-              placeholder={
-                roleTab === 'ADMIN'
-                  ? 'admin@absensi.id'
-                  : roleTab === 'GURU'
-                  ? 'Contoh: budi.guru'
-                  : 'peserta'
-              }
+              placeholder={roleTab === 'ADMIN' ? 'Masukkan username / email' : 'Masukkan username / NIP'}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:border-blue-500 font-medium"
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:border-blue-500 font-medium placeholder:text-slate-400"
             />
           </div>
 
@@ -194,7 +128,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 placeholder="Masukkan kata sandi"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-3.5 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:border-blue-500 font-medium"
+                className="w-full pl-3.5 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden focus:border-blue-500 font-medium placeholder:text-slate-400"
               />
               <button
                 type="button"
@@ -209,41 +143,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold rounded-xl transition shadow-md cursor-pointer"
+            className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold rounded-xl transition shadow-md cursor-pointer mt-1"
           >
             {loading ? 'Memverifikasi...' : 'Masuk Sekarang'}
           </button>
         </form>
-
-        {/* Quick Demo Credential Helper */}
-        <div className="pt-2 border-t border-slate-100 text-[10px] text-slate-400 flex items-center justify-between">
-          <span>Uji Coba Cepat:</span>
-          <div className="flex items-center gap-1.5 font-bold">
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('GURU')}
-              className="text-emerald-700 hover:underline cursor-pointer"
-            >
-              Demo Guru
-            </button>
-            <span>•</span>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('ADMIN')}
-              className="text-blue-600 hover:underline cursor-pointer"
-            >
-              Admin
-            </button>
-            <span>•</span>
-            <button
-              type="button"
-              onClick={() => handleQuickDemo('PIKET')}
-              className="text-amber-600 hover:underline cursor-pointer"
-            >
-              Piket
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

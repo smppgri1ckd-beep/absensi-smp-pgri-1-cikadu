@@ -17,6 +17,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from '../types';
+import { DEFAULT_SCHOOL_CONFIG } from '../firebase';
 import { processImageFile } from '../utils/qr';
 import { exportStudentsToExcel } from '../utils/export';
 import { StudentDetailModal } from './StudentDetailModal';
@@ -627,24 +628,7 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
         studentsList={filtered}
         onSelectStudent={(s) => setSelectedDetailStudent(s)}
         attendance={attendance}
-        config={
-          config || {
-            namaSekolah: 'e-Presensi Digital',
-            npsn: '-',
-            alamat: '-',
-            logoUrl: '',
-            jamMasukPagi: '07:00',
-            jamPulangPagi: '12:00',
-            jamMasukSiang: '12:30',
-            jamPulangSiang: '17:00',
-            toleransiTerlambatMenit: 15,
-            radiusMeter: 100,
-            lokasiLat: 0,
-            lokasiLng: 0,
-            kepalaSekolah: '',
-            nipKepalaSekolah: '',
-          }
-        }
+        config={config || DEFAULT_SCHOOL_CONFIG}
         teachers={teachers}
         onShowNotice={onShowNotice}
       />

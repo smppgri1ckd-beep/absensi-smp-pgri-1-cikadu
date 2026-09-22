@@ -88,7 +88,7 @@ export interface TeacherUser {
 }
 
 export interface UserSession {
-  role: 'ADMIN' | 'GURU' | 'PESERTA' | null;
+  role: 'ADMIN' | 'GURU' | null;
   name: string | null;
   teacherData?: TeacherUser | null;
 }
