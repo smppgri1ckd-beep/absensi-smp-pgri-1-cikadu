@@ -2,6 +2,8 @@ export type Gender = 'L' | 'P';
 
 export type AttendanceSession = 'Pagi' | 'Siang';
 
+export type AttendanceCategory = 'APEL' | 'KELAS';
+
 export type AttendanceStatus =
   | 'Hadir Tepat Waktu'
   | 'Terlambat'
@@ -30,6 +32,13 @@ export interface AttendanceRecord {
   kelas: string;
   sesi: AttendanceSession;
   status: AttendanceStatus | string;
+  // Dual-Function Attributes:
+  kategori?: AttendanceCategory; // 'APEL' (Apel Pagi / Siang) or 'KELAS' (KBM Tatap Muka Mapel)
+  mapel?: string;                 // e.g. "Matematika", "Informatika"
+  pertemuanKe?: number;           // Pertemuan ke-1, 2, 3, dst
+  materiPokok?: string;           // Materi pembelajaran
+  guruId?: string;                // ID Guru Pengajar
+  guruNama?: string;              // Nama Guru Pengajar
 }
 
 export interface ScheduleConfig {
@@ -82,7 +91,9 @@ export interface TeacherUser {
   password: string;
   mapel: string;
   waliKelas?: string;
-  kontak?: string;
+  kontak?: string; // No HP / WhatsApp Wali Kelas
+  noHp?: string;   // Nomor HP / WA langsung
+  fotoUrl?: string; // Foto profil guru (diunggah guru / admin)
   status: 'AKTIF' | 'NONAKTIF';
   createdAt: string;
 }

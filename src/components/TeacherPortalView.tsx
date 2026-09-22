@@ -22,6 +22,14 @@ import {
   CalendarDays,
   FileText,
   Eye,
+  Trash2,
+  Download,
+  FileDown,
+  RotateCcw,
+  Check,
+  X,
+  QrCode,
+  Camera,
 } from 'lucide-react';
 import {
   Student,
@@ -30,8 +38,12 @@ import {
   TeacherUser,
   AttendanceSession,
   AttendanceStatus,
+  AttendanceCategory,
 } from '../types';
+import { OFFICIAL_SUBJECTS } from '../constants/subjects';
 import { StudentDetailModal } from './StudentDetailModal';
+import { TeacherQRScannerModal } from './TeacherQRScannerModal';
+import { exportTeacherDailyPDF } from '../utils/teacherExportPdf';
 
 interface TeacherPortalViewProps {
   teacher: TeacherUser;
@@ -43,6 +55,7 @@ interface TeacherPortalViewProps {
   dateString: string;
   dayKey: string;
   onRecordAttendance: (record: AttendanceRecord) => Promise<boolean>;
+  onDeleteAttendance?: (id: string) => Promise<void>;
   onShowNotice: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
@@ -57,6 +70,7 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
   dateString,
   dayKey,
   onRecordAttendance,
+  onDeleteAttendance,
   onShowNotice,
   onShowConfirm,
 }) => {
@@ -81,15 +95,38 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
   const [activeTab, setActiveTab] = useState<'PRESENSI' | 'JURNAL' | 'SISWA' | 'PIKET'>('PRESENSI');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Dual-Function: APEL (Pagi/Siang) vs KELAS (KBM Mengajar)
+  const [attendanceCategory, setAttendanceCategory] = useState<AttendanceCategory>('KELAS');
+  const [selectedMapel, setSelectedMapel] = useState<string>(() => teacher.mapel || OFFICIAL_SUBJECTS[0]);
+  const [pertemuanKe, setPertemuanKe] = useState<number>(1);
+  const [materiPokok, setMateriPokok] = useState<string>('');
+
   // Modal Input Izin / Sakit
   const [showIzinModal, setShowIzinModal] = useState(false);
   const [targetStudent, setTargetStudent] = useState<Student | null>(null);
   const [izinStatus, setIzinStatus] = useState<'Izin' | 'Sakit' | 'Alpa' | 'Hadir Tepat Waktu'>('Izin');
   const [izinKeterangan, setIzinKeterangan] = useState('');
 
+  // Modal Edit Presensi Manual / Koreksi
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
+  const [editStatus, setEditStatus] = useState<string>('Hadir Tepat Waktu');
+  const [editWaktu, setEditWaktu] = useState<string>('');
+  const [editSesi, setEditSesi] = useState<AttendanceSession>('Pagi');
+  const [editTanggal, setEditTanggal] = useState<string>('');
+  const [editKeterangan, setEditKeterangan] = useState<string>('');
+  const [editKategori, setEditKategori] = useState<AttendanceCategory>('KELAS');
+  const [editMapel, setEditMapel] = useState<string>(teacher.mapel || OFFICIAL_SUBJECTS[0]);
+  const [editPertemuanKe, setEditPertemuanKe] = useState<number>(1);
+  const [editMateriPokok, setEditMateriPokok] = useState<string>('');
+
   // Student Detail Modal state
   const [selectedDetailStudent, setSelectedDetailStudent] = useState<Student | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  // QR Scanner Modal for KBM Presensi
+  const [showQRScanner, setShowQRScanner] = useState(false);
 
   const handleOpenStudentDetail = (s: Student) => {
     setSelectedDetailStudent(s);
@@ -108,12 +145,23 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
       .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
   }, [students, selectedClass, searchQuery]);
 
-  // Attendance records for the selected date & session
+  // Attendance records for the selected date, category & session/mapel
   const dateSessionRecords = useMemo(() => {
-    return attendance.filter(
-      (a) => a.tanggal === selectedDate && a.sesi === selectedSession
-    );
-  }, [attendance, selectedDate, selectedSession]);
+    return attendance.filter((a) => {
+      if (a.tanggal !== selectedDate) return false;
+      if (attendanceCategory === 'KELAS') {
+        if (a.kategori === 'KELAS') {
+          const mapelMatch = !a.mapel || a.mapel === selectedMapel;
+          const pertemuanMatch = a.pertemuanKe === undefined || a.pertemuanKe === pertemuanKe;
+          return mapelMatch && pertemuanMatch;
+        }
+        return false;
+      } else {
+        const isApel = a.kategori === 'APEL' || !a.kategori;
+        return isApel && a.sesi === selectedSession;
+      }
+    });
+  }, [attendance, selectedDate, attendanceCategory, selectedSession, selectedMapel, pertemuanKe]);
 
   // Map of student NISN to their attendance record
   const studentAttendanceMap = useMemo(() => {
@@ -178,8 +226,13 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
       now.getMinutes()
     ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
 
+    const isKelas = attendanceCategory === 'KELAS';
+    const recId = isKelas
+      ? `kbm_${student.nisn}_${selectedDate}_${selectedMapel.replace(/\s+/g, '_')}_p${pertemuanKe}`
+      : `att_${student.nisn}_${selectedDate}_${selectedSession}`;
+
     const newRecord: AttendanceRecord = {
-      id: `att_${student.nisn}_${selectedDate}_${selectedSession}`,
+      id: recId,
       tanggal: selectedDate,
       waktu: timeNow,
       nisn: student.nisn,
@@ -187,12 +240,18 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
       kelas: student.kelas,
       sesi: selectedSession,
       status: note ? `${newStatus} (${note})` : newStatus,
+      kategori: attendanceCategory,
+      ...(isKelas ? {
+        mapel: selectedMapel,
+        pertemuanKe,
+        materiPokok: materiPokok.trim() || undefined,
+      } : {}),
     };
 
     onRecordAttendance(newRecord).then(() => {
       onShowNotice(
         'Status Presensi Diperbarui',
-        `${student.nama} (${student.kelas}) ditandai: ${newStatus}`,
+        `${student.nama} (${student.kelas}) ditandai: ${newStatus}${isKelas ? ` [${selectedMapel} Ke-${pertemuanKe}]` : ''}`,
         'success'
       );
     });
@@ -219,6 +278,149 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
       izinKeterangan.trim() || undefined
     );
     setShowIzinModal(false);
+  };
+
+  // Open Edit Modal for a student / attendance record
+  const handleOpenEditModal = (student: Student, record?: AttendanceRecord) => {
+    setEditingStudent(student);
+    setEditingRecord(record || null);
+
+    const now = new Date();
+    const timeNow = `${String(now.getHours()).padStart(2, '0')}:${String(
+      now.getMinutes()
+    ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    if (record) {
+      setEditTanggal(record.tanggal);
+      setEditWaktu(record.waktu);
+      setEditSesi(record.sesi);
+      setEditKategori(record.kategori || attendanceCategory);
+      setEditMapel(record.mapel || selectedMapel);
+      setEditPertemuanKe(record.pertemuanKe || pertemuanKe);
+      setEditMateriPokok(record.materiPokok || materiPokok || '');
+
+      // Extract raw status vs note if any
+      const match = record.status.match(/^(.*?)\s*\((.*?)\)$/);
+      if (match) {
+        setEditStatus(match[1]);
+        setEditKeterangan(match[2]);
+      } else {
+        setEditStatus(record.status);
+        setEditKeterangan('');
+      }
+    } else {
+      setEditTanggal(selectedDate);
+      setEditWaktu(timeNow);
+      setEditSesi(selectedSession);
+      setEditKategori(attendanceCategory);
+      setEditMapel(selectedMapel);
+      setEditPertemuanKe(pertemuanKe);
+      setEditMateriPokok(materiPokok);
+      setEditStatus('Hadir Tepat Waktu');
+      setEditKeterangan('');
+    }
+
+    setShowEditModal(true);
+  };
+
+  // Save changes from Edit Modal
+  const handleSaveEditAttendance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+
+    const fullStatus = editKeterangan.trim()
+      ? `${editStatus} (${editKeterangan.trim()})`
+      : editStatus;
+
+    const isKelas = editKategori === 'KELAS';
+    const recordId =
+      editingRecord?.id ||
+      (isKelas
+        ? `kbm_${editingStudent.nisn}_${editTanggal}_${editMapel.replace(/\s+/g, '_')}_p${editPertemuanKe}`
+        : `att_${editingStudent.nisn}_${editTanggal}_${editSesi}`);
+
+    const updatedRecord: AttendanceRecord = {
+      id: recordId,
+      tanggal: editTanggal,
+      waktu: editWaktu || '07:00:00',
+      nisn: editingStudent.nisn,
+      nama: editingStudent.nama,
+      kelas: editingStudent.kelas,
+      sesi: editSesi,
+      status: fullStatus as AttendanceStatus,
+      kategori: editKategori,
+      ...(isKelas ? {
+        mapel: editMapel,
+        pertemuanKe: editPertemuanKe,
+        materiPokok: editMateriPokok.trim() || undefined,
+      } : {}),
+    };
+
+    await onRecordAttendance(updatedRecord);
+    setShowEditModal(false);
+    onShowNotice(
+      'Data Presensi Diperbarui',
+      `Data presensi ${editingStudent.nama} (${editingStudent.kelas}) berhasil disimpan.`,
+      'success'
+    );
+  };
+
+  // Delete attendance record
+  const handleDeleteAttendanceRecord = (student: Student, record: AttendanceRecord) => {
+    onShowConfirm(
+      'Hapus Catatan Presensi?',
+      `Apakah Anda yakin ingin menghapus data presensi ${student.nama} (${record.status} - ${record.tanggal} ${record.kategori === 'KELAS' ? record.mapel : `Sesi ${record.sesi}`})? Status siswa akan kembali menjadi Belum Hadir / Kosong.`,
+      async () => {
+        if (onDeleteAttendance) {
+          await onDeleteAttendance(record.id);
+        } else {
+          // Fallback if not provided directly
+          const localStored = localStorage.getItem('epresensi_local_attendance');
+          if (localStored) {
+            try {
+              const parsed = JSON.parse(localStored);
+              const updated = parsed.filter((a: any) => a.id !== record.id);
+              localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
+            } catch (err) {
+              console.warn(err);
+            }
+          }
+        }
+        onShowNotice(
+          'Presensi Dihapus',
+          `Catatan presensi untuk ${student.nama} telah berhasil dihapus.`,
+          'info'
+        );
+      }
+    );
+  };
+
+  // Download PDF Report
+  const handleDownloadPDF = async () => {
+    try {
+      await exportTeacherDailyPDF(
+        config,
+        teacher,
+        selectedClass,
+        selectedSession,
+        selectedDate,
+        classStudents,
+        attendance,
+        {
+          kategori: attendanceCategory,
+          mapel: selectedMapel,
+          pertemuanKe,
+          materiPokok,
+        }
+      );
+      onShowNotice(
+        'Laporan Berhasil Diunduh',
+        `File PDF presensi Kelas ${selectedClass} (${attendanceCategory === 'KELAS' ? `${selectedMapel} Ke-${pertemuanKe}` : `Apel ${selectedSession}`}) untuk tanggal ${selectedDate} telah diunduh.`,
+        'success'
+      );
+    } catch (err: any) {
+      onShowNotice('Gagal Mengunduh PDF', err?.message || 'Terjadi kesalahan saat membuat file PDF.', 'warning');
+    }
   };
 
   const handlePrintClassSheet = () => {
@@ -343,7 +545,117 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
       {/* ===== TAB 1: PRESENSI KELAS HARI INI ===== */}
       {activeTab === 'PRESENSI' && (
         <div className="space-y-4">
-          {/* Controls Bar */}
+          {/* Dual-Function Selector Bar (Apel Sekolah vs Presensi KBM Kelas Mengajar) */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-xs">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {/* Function Toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider hidden sm:inline">Mode Presensi:</span>
+                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceCategory('KELAS')}
+                    className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      attendanceCategory === 'KELAS'
+                        ? 'bg-teal-600 text-white shadow-2xs font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>Presensi KBM Kelas (Guru Mengajar)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAttendanceCategory('APEL')}
+                    className={`flex-1 sm:flex-initial px-3.5 py-2 rounded-lg transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                      attendanceCategory === 'APEL'
+                        ? 'bg-blue-600 text-white shadow-2xs font-extrabold'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Presensi Apel Sekolah (Pagi/Siang)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Badges / Active Mode Indicator */}
+              <div className="flex items-center gap-2 self-start lg:self-auto">
+                {attendanceCategory === 'KELAS' ? (
+                  <span className="text-[11px] font-extrabold text-teal-800 bg-teal-50 px-3 py-1.5 rounded-xl border border-teal-200">
+                    KBM Tatap Muka: {selectedMapel} (Pertemuan Ke-{pertemuanKe})
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-extrabold text-blue-800 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">
+                    Apel Sekolah: Sesi {selectedSession === 'Pagi' ? 'Apel Pagi' : 'Apel Siang'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Sub-bar depending on selected category */}
+            {attendanceCategory === 'KELAS' ? (
+              <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Mata Pelajaran (Mapel)
+                  </label>
+                  <select
+                    value={selectedMapel}
+                    onChange={(e) => setSelectedMapel(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-hidden"
+                  >
+                    {OFFICIAL_SUBJECTS.map((m) => (
+                      <option key={m} value={m}>
+                        {m} {m === teacher.mapel ? '(Ampuan Saya)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Pertemuan Ke-
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={pertemuanKe}
+                    onChange={(e) => setPertemuanKe(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 text-center focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Materi Pokok / Pembahasan
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Bab 1..."
+                    value={materiPokok}
+                    onChange={(e) => setMateriPokok(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 focus:outline-hidden"
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowQRScanner(true)}
+                    className="w-full py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                    title="Buka Kamera Scan QR Code Siswa untuk KBM Kelas Ini"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span>Scan QR Siswa</span>
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Controls Bar: Class, Date, Session (if Apel) & Search */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs flex flex-col md:flex-row gap-3 items-center justify-between">
             <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
               <div>
@@ -375,35 +687,37 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 mb-1">
-                  Sesi
-                </label>
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSession('Pagi')}
-                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                      selectedSession === 'Pagi'
-                        ? 'bg-white text-blue-700 shadow-2xs'
-                        : 'text-slate-600'
-                    }`}
-                  >
-                    Pagi
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedSession('Siang')}
-                    className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                      selectedSession === 'Siang'
-                        ? 'bg-white text-emerald-700 shadow-2xs'
-                        : 'text-slate-600'
-                    }`}
-                  >
-                    Siang
-                  </button>
+              {attendanceCategory === 'APEL' ? (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                    Sesi Apel Sekolah
+                  </label>
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSession('Pagi')}
+                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                        selectedSession === 'Pagi'
+                          ? 'bg-white text-blue-700 shadow-2xs'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      Apel Pagi
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSession('Siang')}
+                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
+                        selectedSession === 'Siang'
+                          ? 'bg-white text-emerald-700 shadow-2xs'
+                          : 'text-slate-600'
+                      }`}
+                    >
+                      Apel Siang
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
 
             {/* Student Search */}
@@ -460,19 +774,51 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
 
           {/* Student Attendance Table */}
           <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-xs">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
               <div>
                 <h3 className="text-xs font-extrabold text-slate-800">
-                  Daftar Presensi Kelas {selectedClass} • {selectedDate} (Sesi {selectedSession})
+                  {attendanceCategory === 'KELAS' ? (
+                    <span>
+                      Presensi KBM Kelas {selectedClass} • {selectedMapel} (Pertemuan Ke-{pertemuanKe}) • {selectedDate}
+                    </span>
+                  ) : (
+                    <span>
+                      Daftar Presensi Apel Kelas {selectedClass} • {selectedDate} (Sesi Apel {selectedSession})
+                    </span>
+                  )}
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  Guru dapat langsung mencatat Izin/Sakit dari orang tua atau mengubah status presensi siswa.
+                  {attendanceCategory === 'KELAS'
+                    ? `Presensi tatap muka mata pelajaran ${selectedMapel} oleh guru pengajar saat KBM di dalam kelas.`
+                    : 'Presensi apel kedisiplinan sekolah (Apel Pagi / Apel Siang) siswa per rombel.'}
                 </p>
               </div>
 
-              <span className="text-xs font-black text-blue-700 bg-blue-50 px-3 py-1 rounded-xl border border-blue-200">
-                Kehadiran: {stats.persentase}%
-              </span>
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {attendanceCategory === 'KELAS' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowQRScanner(true)}
+                    className="px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="Buka Kamera Scan QR Code Siswa untuk Presensi KBM"
+                  >
+                    <QrCode className="w-4 h-4" />
+                    <span>Scan QR Siswa</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleDownloadPDF}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Download Laporan Presensi Format PDF"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download PDF</span>
+                </button>
+                <span className="text-xs font-black text-blue-700 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-200">
+                  Kehadiran: {stats.persentase}%
+                </span>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -612,6 +958,28 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                               >
                                 Alpa
                               </button>
+
+                              {/* Edit Data Presensi */}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditModal(s, record)}
+                                className="p-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 rounded-lg transition cursor-pointer"
+                                title="Edit / Koreksi Data Presensi Siswa"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Hapus Data Presensi (jika ada record) */}
+                              {record && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteAttendanceRecord(s, record)}
+                                  className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg transition cursor-pointer"
+                                  title="Hapus Data Presensi (Reset Jadi Kosong/Belum Hadir)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -638,7 +1006,7 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={selectedClass}
                 onChange={(e) => setSelectedClass(e.target.value)}
@@ -653,6 +1021,16 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
 
               <button
                 type="button"
+                onClick={handleDownloadPDF}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                title="Download Laporan Presensi Format PDF"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Laporan PDF</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handlePrintClassSheet}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
               >
@@ -664,17 +1042,39 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
 
           {/* Printable Class Attendance Sheet (A4 Styled Document) */}
           <div className="bg-white border border-slate-300 rounded-2xl p-6 sm:p-8 shadow-sm space-y-5 print:border-none print:shadow-none print:p-0">
-            {/* Kop Laporan */}
-            <div className="border-b-2 border-slate-900 pb-4 text-center space-y-1">
-              <h3 className="text-sm sm:text-base font-black uppercase text-slate-900 tracking-wider">
-                {config.namaSekolah}
-              </h3>
-              <p className="text-xs font-bold text-slate-700">
-                LEMBAR PRESENSI & JURNAL KEHADIRAN SISWA
-              </p>
-              <p className="text-[11px] text-slate-500">
-                NPSN: {config.npsn} • {config.alamat} • Kontak: {config.kontak}
-              </p>
+            {/* Kop Laporan Resmi dengan Logo Sekolah */}
+            <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
+              <div className="w-16 sm:w-20 shrink-0 flex items-center justify-center">
+                <img
+                  src={config.logoUrl}
+                  alt="Logo Sekolah"
+                  className="w-14 h-14 sm:w-16 sm:h-16 object-contain"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      'https://cdn-icons-png.flaticon.com/512/2856/2856000.png';
+                  }}
+                />
+              </div>
+              <div className="flex-1 text-center space-y-0.5">
+                <h4 className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-800 leading-tight">
+                  PERWAKILAN YAYASAN PEMBINA LEMBAGA PENDIDIKAN
+                </h4>
+                <h4 className="text-[10.5px] sm:text-[11.5px] font-bold uppercase tracking-wide text-slate-800 leading-tight">
+                  PERSATUAN GURU REPUBLIK INDONESIA (YPLP PGRI) KABUPATEN CIANJUR
+                </h4>
+                <h3 className="text-base sm:text-lg font-black uppercase text-slate-950 tracking-wide leading-tight pt-0.5">
+                  {config.namaSekolah}
+                </h3>
+                <p className="text-[11px] font-bold text-slate-700">
+                  {attendanceCategory === 'KELAS'
+                    ? 'LEMBAR PRESENSI KEGIATAN BELAJAR MENGAJAR (KBM KELAS)'
+                    : 'LEMBAR PRESENSI APEL KEDISIPLINAN SEKOLAH'}
+                </p>
+                <p className="text-[10px] sm:text-[11px] text-slate-500">
+                  NPSN: {config.npsn} • {config.alamat} • {config.kontak}
+                </p>
+              </div>
+              <div className="w-16 sm:w-20 shrink-0 hidden sm:block" />
             </div>
 
             {/* Document Meta Info */}
@@ -684,12 +1084,20 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                   <span className="font-bold">Kelas / Rombel:</span> Kelas {selectedClass}
                 </p>
                 <p>
-                  <span className="font-bold">Guru Pengajar:</span> {teacher.nama} ({teacher.mapel})
+                  <span className="font-bold">Guru Pengajar:</span> {teacher.nama} ({selectedMapel})
                 </p>
+                {attendanceCategory === 'KELAS' && (
+                  <p>
+                    <span className="font-bold">Materi Pokok:</span> {materiPokok || '-'}
+                  </p>
+                )}
               </div>
               <div className="text-right">
                 <p>
-                  <span className="font-bold">Tanggal:</span> {selectedDate} (Sesi {selectedSession})
+                  <span className="font-bold">Tanggal:</span> {selectedDate}{' '}
+                  {attendanceCategory === 'KELAS'
+                    ? `(Pertemuan Ke-${pertemuanKe})`
+                    : `(Sesi Apel ${selectedSession})`}
                 </p>
                 <p>
                   <span className="font-bold">Tingkat Kehadiran:</span> {stats.persentase}% ({stats.hadir + stats.terlambat} dari {stats.total} Siswa)
@@ -1050,6 +1458,228 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
         </div>
       )}
 
+      {/* Modal Edit / Koreksi Data Presensi Siswa */}
+      {showEditModal && editingStudent && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900">
+                  {editingRecord ? 'Edit / Koreksi Data Presensi' : 'Tambah Presensi Siswa'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {editingStudent.nama} ({editingStudent.kelas}) • NISN: {editingStudent.nisn}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAttendance} className="space-y-4 text-xs">
+              {/* Kategori Switcher */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Kategori Presensi
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditKategori('KELAS')}
+                    className={`p-2 rounded-xl border text-center font-bold transition cursor-pointer ${
+                      editKategori === 'KELAS'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Presensi KBM Kelas
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditKategori('APEL')}
+                    className={`p-2 rounded-xl border text-center font-bold transition cursor-pointer ${
+                      editKategori === 'APEL'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    Presensi Apel Sekolah
+                  </button>
+                </div>
+              </div>
+
+              {editKategori === 'KELAS' && (
+                <div className="p-3 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] text-teal-900 font-bold mb-1">
+                        Mata Pelajaran (Mapel)
+                      </label>
+                      <select
+                        value={editMapel}
+                        onChange={(e) => setEditMapel(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden"
+                      >
+                        {OFFICIAL_SUBJECTS.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-teal-900 font-bold mb-1">
+                        Pertemuan Ke-
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={editPertemuanKe}
+                        onChange={(e) => setEditPertemuanKe(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-bold text-center focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-teal-900 font-bold mb-1">
+                      Materi Pokok / Pembahasan
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Bab 1 Pendahuluan..."
+                      value={editMateriPokok}
+                      onChange={(e) => setEditMateriPokok(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    Tanggal
+                  </label>
+                  <input
+                    type="date"
+                    value={editTanggal}
+                    onChange={(e) => setEditTanggal(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-medium text-slate-800 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    Jam Presensi
+                  </label>
+                  <input
+                    type="text"
+                    value={editWaktu}
+                    onChange={(e) => setEditWaktu(e.target.value)}
+                    placeholder="07:05:00"
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono text-slate-800 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">
+                    Sesi Waktu
+                  </label>
+                  <select
+                    value={editSesi}
+                    onChange={(e) => setEditSesi(e.target.value as AttendanceSession)}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 focus:outline-hidden"
+                  >
+                    <option value="Pagi">Pagi</option>
+                    <option value="Siang">Siang</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Status Kehadiran
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { key: 'Hadir Tepat Waktu', label: 'Hadir Tepat' },
+                    { key: 'Terlambat', label: 'Terlambat' },
+                    { key: 'Izin', label: 'Izin' },
+                    { key: 'Sakit', label: 'Sakit' },
+                    { key: 'Alpa', label: 'Alpa' },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => setEditStatus(item.key)}
+                      className={`p-2.5 rounded-xl border text-center font-bold transition cursor-pointer ${
+                        editStatus === item.key
+                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Keterangan / Catatan Tambahan (Opsional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Contoh: Terlambat karena ban bocor / Izin acara keluarga..."
+                  value={editKeterangan}
+                  onChange={(e) => setEditKeterangan(e.target.value)}
+                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                {editingRecord ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      handleDeleteAttendanceRecord(editingStudent, editingRecord);
+                    }}
+                    className="px-3 py-2 text-rose-600 hover:bg-rose-50 font-bold text-xs rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus Data Ini</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="px-4 py-2 text-slate-600 font-bold text-xs rounded-xl hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                  >
+                    Simpan Perubahan
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Aesthetic Student Detail Modal */}
       <StudentDetailModal
         isOpen={isDetailModalOpen}
@@ -1060,6 +1690,21 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
         attendance={attendance}
         config={config}
         onOpenIzinModal={(s) => handleOpenIzinModal(s)}
+        onShowNotice={onShowNotice}
+      />
+
+      {/* Teacher QR Code Scanner Modal for KBM Kelas */}
+      <TeacherQRScannerModal
+        isOpen={showQRScanner}
+        onClose={() => setShowQRScanner(false)}
+        selectedClass={selectedClass}
+        selectedDate={selectedDate}
+        selectedMapel={selectedMapel}
+        pertemuanKe={pertemuanKe}
+        materiPokok={materiPokok}
+        students={students}
+        attendance={attendance}
+        onRecordAttendance={onRecordAttendance}
         onShowNotice={onShowNotice}
       />
     </div>

@@ -79,8 +79,8 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
     });
   };
 
-  const handleExportPDF = () => {
-    exportRekapPDF(
+  const handleExportPDF = async () => {
+    await exportRekapPDF(
       config,
       students,
       attendance,
@@ -344,7 +344,8 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
                     (a) =>
                       String(a.nisn).trim() === String(siswa.nisn).trim() &&
                       a.tanggal >= tglAwal &&
-                      a.tanggal <= tglAkhir
+                      a.tanggal <= tglAkhir &&
+                      (a.kategori === 'APEL' || !a.kategori)
                   );
                   const pagiCount = studentLogs.filter((a) => a.sesi === 'Pagi').length;
                   const siangCount = studentLogs.filter((a) => a.sesi === 'Siang').length;

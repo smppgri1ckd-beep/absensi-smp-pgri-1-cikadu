@@ -106,24 +106,24 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Active Session Badge & Switch */}
         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 sm:px-2.5 py-1 rounded-xl">
           <span className="text-[10px] font-medium text-slate-500 hidden md:inline">
-            Sesi:
+            Apel:
           </span>
           <span
-            className={`text-xs font-black font-mono px-1.5 py-0.5 rounded-md ${
+            className={`text-xs font-black px-1.5 py-0.5 rounded-md ${
               activeSession === 'Pagi'
                 ? 'bg-blue-100 text-blue-700'
                 : 'bg-emerald-100 text-emerald-700'
             }`}
           >
-            {activeSession.toUpperCase()}
+            {activeSession === 'Pagi' ? 'PAGI' : 'SIANG'}
           </span>
           <button
             type="button"
             onClick={onToggleSessionManual}
-            title="Alihkan Sesi Manual"
-            className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition hover:bg-slate-200"
+            title="Alihkan Sesi Apel Manual (Pagi / Siang)"
+            className="text-slate-400 hover:text-slate-700 p-0.5 rounded transition hover:bg-slate-200 cursor-pointer"
           >
-            <ArrowRightLeft className="w-3 h-3" />
+            <ArrowRightLeft className="w-3.5 h-3.5" />
           </button>
         </div>
 

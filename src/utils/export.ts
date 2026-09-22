@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { Student, AttendanceRecord, SchoolConfig } from '../types';
+import { getSchoolLogoImage } from './imageLoader';
 
 export function exportStudentsToExcel(students: Student[]) {
   const sorted = [...students].sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
@@ -52,7 +53,11 @@ export function exportRekapToExcel(
 
   filteredStudents.forEach((s, idx) => {
     const studentLogs = attendance.filter(
-      a => String(a.nisn).trim() === String(s.nisn).trim() && a.tanggal >= tglAwal && a.tanggal <= tglAkhir
+      a =>
+        String(a.nisn).trim() === String(s.nisn).trim() &&
+        a.tanggal >= tglAwal &&
+        a.tanggal <= tglAkhir &&
+        (a.kategori === 'APEL' || !a.kategori)
     );
     const pagiCount = studentLogs.filter(a => a.sesi === 'Pagi').length;
     const siangCount = studentLogs.filter(a => a.sesi === 'Siang').length;
@@ -111,7 +116,7 @@ export function exportRekapToExcel(
   XLSX.writeFile(wb, `Rekap_Presensi_${kelas}_${tglAwal}_sd_${tglAkhir}.xlsx`);
 }
 
-export function exportRekapPDF(
+export async function exportRekapPDF(
   config: SchoolConfig,
   students: Student[],
   attendance: AttendanceRecord[],
@@ -133,22 +138,41 @@ export function exportRekapPDF(
   const margin = 10;
   let y = 14;
 
+  // Render Logo Sekolah in Kop Surat
+  let logoImg: HTMLImageElement | string | null = null;
+  try {
+    logoImg = await getSchoolLogoImage(config.logoUrl);
+  } catch {
+    logoImg = null;
+  }
+
+  // Draw school logo on the top-left if available
+  if (logoImg) {
+    try {
+      doc.addImage(logoImg as any, 'PNG', margin + 1, 13, 20, 20);
+    } catch (e) {
+      console.warn('Could not render logo to Rekap PDF:', e);
+    }
+  }
+
   // Header / Kop Surat
+  const textCenterX = logoImg ? (pageWidth + margin + 16) / 2 : pageWidth / 2;
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8.5);
-  doc.text("PERWAKILAN YAYASAN PEMBINA LEMBAGA PENDIDIKAN", pageWidth / 2, y, { align: 'center' });
+  doc.text("PERWAKILAN YAYASAN PEMBINA LEMBAGA PENDIDIKAN", textCenterX, y, { align: 'center' });
   y += 4;
-  doc.text("PERSATUAN GURU REPUBLIK INDONESIA (YPLP PGRI) KABUPATEN CIANJUR", pageWidth / 2, y, { align: 'center' });
+  doc.text("PERSATUAN GURU REPUBLIK INDONESIA (YPLP PGRI) KABUPATEN CIANJUR", textCenterX, y, { align: 'center' });
   y += 5;
   doc.setFontSize(13);
-  doc.text(config.namaSekolah.toUpperCase(), pageWidth / 2, y, { align: 'center' });
+  doc.text(config.namaSekolah.toUpperCase(), textCenterX, y, { align: 'center' });
   y += 4;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.text(config.alamat, pageWidth / 2, y, { align: 'center' });
+  doc.text(config.alamat, textCenterX, y, { align: 'center' });
   y += 3.5;
-  doc.text(`${config.kontak} | NPSN: ${config.npsn}`, pageWidth / 2, y, { align: 'center' });
-  y += 3;
+  doc.text(`${config.kontak} | NPSN: ${config.npsn}`, textCenterX, y, { align: 'center' });
+  y += 4;
 
   // Double border line
   doc.setLineWidth(0.8);
@@ -218,7 +242,11 @@ export function exportRekapPDF(
     }
 
     const studentLogs = attendance.filter(
-      a => String(a.nisn).trim() === String(siswa.nisn).trim() && a.tanggal >= tglAwal && a.tanggal <= tglAkhir
+      a =>
+        String(a.nisn).trim() === String(siswa.nisn).trim() &&
+        a.tanggal >= tglAwal &&
+        a.tanggal <= tglAkhir &&
+        (a.kategori === 'APEL' || !a.kategori)
     );
     const pagiCount = studentLogs.filter(a => a.sesi === 'Pagi').length;
     const siangCount = studentLogs.filter(a => a.sesi === 'Siang').length;
@@ -289,3 +317,219 @@ export function exportRekapPDF(
 
   doc.save(`Rekap_Presensi_${config.namaSekolah.replace(/\s+/g, '_')}_${tglAwal}_sd_${tglAkhir}.pdf`);
 }
+
+export async function exportSingleStudentAttendancePDF(
+  config: SchoolConfig,
+  student: Student,
+  attendanceRecords: AttendanceRecord[]
+) {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const pageWidth = 210;
+  const margin = 14;
+  let y = 14;
+
+  // Render Logo Sekolah in Kop Surat
+  let logoImg: HTMLImageElement | string | null = null;
+  try {
+    logoImg = await getSchoolLogoImage(config.logoUrl);
+  } catch {
+    logoImg = null;
+  }
+
+  // Draw school logo on top-left if available
+  if (logoImg) {
+    try {
+      doc.addImage(logoImg as any, 'PNG', margin + 1, 13, 20, 20);
+    } catch (e) {
+      console.warn('Could not render logo to Student Slip PDF:', e);
+    }
+  }
+
+  // Header / Kop Surat Resmi
+  const textCenterX = logoImg ? (pageWidth + margin + 16) / 2 : pageWidth / 2;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.text("PERWAKILAN YAYASAN PEMBINA LEMBAGA PENDIDIKAN", textCenterX, y, { align: 'center' });
+  y += 4;
+  doc.text("PERSATUAN GURU REPUBLIK INDONESIA (YPLP PGRI) KABUPATEN CIANJUR", textCenterX, y, { align: 'center' });
+  y += 5;
+  doc.setFontSize(13);
+  doc.text(config.namaSekolah.toUpperCase(), textCenterX, y, { align: 'center' });
+  y += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text(config.alamat, textCenterX, y, { align: 'center' });
+  y += 3.5;
+  doc.text(`${config.kontak} | NPSN: ${config.npsn}`, textCenterX, y, { align: 'center' });
+  y += 4;
+
+  // Divider lines
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, pageWidth - margin, y);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y + 0.8, pageWidth - margin, y + 0.8);
+  y += 6;
+
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('LEMBAR BUKTI & RIWAYAT KEHADIRAN SISWA', pageWidth / 2, y, { align: 'center' });
+  y += 6;
+
+  // Student Identity Box
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(margin, y, pageWidth - (margin * 2), 22, 2, 2, 'FD');
+
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Nama Lengkap:', margin + 4, y + 6);
+  doc.text('NISN:', margin + 4, y + 12);
+  doc.text('Kelas / Rombel:', margin + 4, y + 18);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(student.nama, margin + 32, y + 6);
+  doc.text(student.nisn, margin + 32, y + 12);
+  doc.text(student.kelas, margin + 32, y + 18);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('Jenis Kelamin:', margin + 95, y + 6);
+  doc.text('Tanggal Dicetak:', margin + 95, y + 12);
+  doc.text('Status Data:', margin + 95, y + 18);
+
+  doc.setFont('helvetica', 'normal');
+  doc.text(student.jk === 'L' ? 'Laki-laki' : 'Perempuan', margin + 125, y + 6);
+  doc.text(new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }), margin + 125, y + 12);
+  doc.text('Terverifikasi Sistem Presensi', margin + 125, y + 18);
+
+  y += 26;
+
+  // Attendance Records
+  const studentLogs = attendanceRecords
+    .filter((a) => String(a.nisn).trim() === String(student.nisn).trim())
+    .sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
+
+  const totalLogs = studentLogs.length;
+  const onTimeCount = studentLogs.filter((a) => a.status.includes('Tepat Waktu')).length;
+  const lateCount = studentLogs.filter((a) => a.status.includes('Terlambat')).length;
+  const permissionCount = studentLogs.filter((a) => a.status === 'Izin' || a.status === 'Sakit').length;
+
+  // Mini summary badges
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text(`Total Kehadiran: ${totalLogs} Sesi`, margin, y);
+  doc.text(`Tepat Waktu: ${onTimeCount}`, margin + 50, y);
+  doc.text(`Terlambat: ${lateCount}`, margin + 95, y);
+  doc.text(`Izin/Sakit: ${permissionCount}`, margin + 135, y);
+  y += 5;
+
+  // Table header
+  const tableWidth = pageWidth - (margin * 2);
+  const cols = [
+    { title: 'NO', width: 10, align: 'center' as const },
+    { title: 'TANGGAL', width: 28, align: 'center' as const },
+    { title: 'KATEGORI / SESI / MAPEL', width: 55, align: 'left' as const },
+    { title: 'JAM (WIB)', width: 24, align: 'center' as const },
+    { title: 'STATUS KEHADIRAN', width: 40, align: 'center' as const },
+    { title: 'KETERANGAN', width: tableWidth - 157, align: 'left' as const },
+  ];
+
+  doc.setFillColor(241, 245, 249);
+  doc.rect(margin, y, tableWidth, 6, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+
+  let currentX = margin;
+  cols.forEach((col) => {
+    const textX = col.align === 'center' ? currentX + (col.width / 2) : currentX + 2;
+    doc.text(col.title, textX, y + 4.2, { align: col.align });
+    currentX += col.width;
+  });
+  y += 6;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+
+  const displayLogs = studentLogs.slice(0, 30); // show up to 30 latest entries
+  if (displayLogs.length === 0) {
+    doc.rect(margin, y, tableWidth, 8);
+    doc.text('Belum ada catatan riwayat kehadiran yang tersimpan.', pageWidth / 2, y + 5.2, { align: 'center' });
+    y += 8;
+  } else {
+    displayLogs.forEach((log, idx) => {
+      if (y > 245) {
+        doc.addPage();
+        y = 15;
+      }
+
+      currentX = margin;
+      const rowHeight = 5.5;
+
+      const kategoriText = log.kategori === 'KELAS'
+        ? `KBM: ${log.mapel || 'Mapel'} (P-${log.pertemuanKe || '1'})`
+        : `Apel: Sesi ${log.sesi}`;
+
+      const keteranganText = log.kategori === 'KELAS' && log.materiPokok
+        ? log.materiPokok.substring(0, 24)
+        : '-';
+
+      const rowValues = [
+        String(idx + 1),
+        log.tanggal,
+        kategoriText,
+        `${log.waktu} WIB`,
+        log.status,
+        keteranganText,
+      ];
+
+      cols.forEach((col, cIdx) => {
+        doc.rect(currentX, y, col.width, rowHeight);
+        const textX = col.align === 'center' ? currentX + (col.width / 2) : currentX + 2;
+        doc.text(rowValues[cIdx], textX, y + 3.8, { align: col.align });
+        currentX += col.width;
+      });
+
+      y += rowHeight;
+    });
+  }
+
+  // Signature Block
+  if (y > 235) {
+    doc.addPage();
+    y = 20;
+  } else {
+    y += 10;
+  }
+
+  const leftSignX = margin + 30;
+  const rightSignX = pageWidth - margin - 35;
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Mengetahui / Memeriksa,', leftSignX, y, { align: 'center' });
+  doc.text('Orang Tua / Wali Siswa', leftSignX, y + 4, { align: 'center' });
+
+  const dateNowStr = `${config.kota}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  doc.text(dateNowStr, rightSignX, y, { align: 'center' });
+  doc.text('Petugas / Kepala Sekolah', rightSignX, y + 4, { align: 'center' });
+
+  y += 22;
+
+  // Signature lines & names
+  doc.setFont('helvetica', 'bold');
+  doc.text('( ............................................. )', leftSignX, y, { align: 'center' });
+  doc.text(config.namaKepsek, rightSignX, y, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.text('Nama Terang Orang Tua / Wali', leftSignX, y + 4, { align: 'center' });
+  doc.text(`NIP: ${config.nipKepsek || '-'}`, rightSignX, y + 4, { align: 'center' });
+
+  doc.save(`Presensi_${student.nisn}_${student.nama.replace(/\s+/g, '_')}.pdf`);
+}
+

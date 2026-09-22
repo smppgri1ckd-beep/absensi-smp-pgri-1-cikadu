@@ -13,9 +13,10 @@ import {
   X,
   Eye,
 } from 'lucide-react';
-import { Student, AttendanceRecord, AttendanceSession, AttendanceStatus, SchoolConfig, TeacherUser } from '../types';
+import { Student, AttendanceRecord, AttendanceSession, AttendanceStatus, SchoolConfig, TeacherUser, AttendanceCategory } from '../types';
 import { DEFAULT_SCHOOL_CONFIG } from '../firebase';
 import { StudentDetailModal } from './StudentDetailModal';
+import { OFFICIAL_SUBJECTS } from '../constants/subjects';
 
 interface AttendanceManageViewProps {
   students: Student[];
@@ -47,6 +48,8 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
   const [tglAkhir, setTglAkhir] = useState(today);
   const [filterKelas, setFilterKelas] = useState('ALL');
   const [filterSesi, setFilterSesi] = useState('ALL');
+  const [filterKategori, setFilterKategori] = useState<'ALL' | 'APEL' | 'KELAS'>('ALL');
+  const [filterMapel, setFilterMapel] = useState('ALL');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
   // Student Detail Modal state
@@ -67,6 +70,10 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
   const [formWaktu, setFormWaktu] = useState('');
   const [formSesi, setFormSesi] = useState<AttendanceSession>('Pagi');
   const [formStatus, setFormStatus] = useState<string>('Hadir Tepat Waktu');
+  const [formKategori, setFormKategori] = useState<AttendanceCategory>('APEL');
+  const [formMapel, setFormMapel] = useState<string>(OFFICIAL_SUBJECTS[0]);
+  const [formPertemuanKe, setFormPertemuanKe] = useState<number>(1);
+  const [formMateriPokok, setFormMateriPokok] = useState('');
 
   const classes = Array.from(new Set(students.map((s) => s.kelas))).filter(Boolean).sort();
 
@@ -80,6 +87,15 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
   }
   if (filterSesi !== 'ALL') {
     filtered = filtered.filter((a) => a.sesi === filterSesi);
+  }
+  if (filterKategori !== 'ALL') {
+    filtered = filtered.filter((a) => {
+      const cat = a.kategori || 'APEL';
+      return cat === filterKategori;
+    });
+  }
+  if (filterMapel !== 'ALL') {
+    filtered = filtered.filter((a) => a.mapel === filterMapel);
   }
   filtered.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
 
@@ -102,6 +118,8 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
     setTglAkhir(today);
     setFilterKelas('ALL');
     setFilterSesi('ALL');
+    setFilterKategori('ALL');
+    setFilterMapel('ALL');
   };
 
   const openAddModal = () => {
@@ -119,6 +137,10 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
     setFormWaktu(timeStr);
     setFormSesi(now.getHours() < 12 ? 'Pagi' : 'Siang');
     setFormStatus('Hadir Tepat Waktu');
+    setFormKategori('APEL');
+    setFormMapel(OFFICIAL_SUBJECTS[0]);
+    setFormPertemuanKe(1);
+    setFormMateriPokok('');
     setIsModalOpen(true);
   };
 
@@ -130,6 +152,10 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
     setFormWaktu(rec.waktu);
     setFormSesi(rec.sesi);
     setFormStatus(rec.status);
+    setFormKategori(rec.kategori || 'APEL');
+    setFormMapel(rec.mapel || OFFICIAL_SUBJECTS[0]);
+    setFormPertemuanKe(rec.pertemuanKe || 1);
+    setFormMateriPokok(rec.materiPokok || '');
     setIsModalOpen(true);
   };
 
@@ -143,6 +169,8 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
 
     const recId = modalMode === 'EDIT' && modalRecordId
       ? modalRecordId
+      : formKategori === 'KELAS'
+      ? `KBM_${targetStudent.nisn}_${formTanggal}_${formMapel.replace(/\s+/g, '_')}_P${formPertemuanKe}`
       : `PRESENSI_${targetStudent.nisn}_${formTanggal}_${formSesi}`;
 
     const record: AttendanceRecord = {
@@ -154,6 +182,12 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
       kelas: targetStudent.kelas,
       sesi: formSesi,
       status: formStatus,
+      kategori: formKategori,
+      ...(formKategori === 'KELAS' ? {
+        mapel: formMapel,
+        pertemuanKe: Number(formPertemuanKe) || 1,
+        materiPokok: formMateriPokok.trim() || undefined,
+      } : {}),
     };
 
     try {
@@ -241,7 +275,7 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
       </div>
 
       {/* Filter Toolbar */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3 p-3.5 bg-white border border-slate-200 rounded-2xl shadow-xs">
         <div>
           <label className="block text-[10px] font-bold text-slate-600 mb-1">
             Tanggal Mulai
@@ -268,6 +302,21 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
 
         <div>
           <label className="block text-[10px] font-bold text-slate-600 mb-1">
+            Fungsi / Kategori
+          </label>
+          <select
+            value={filterKategori}
+            onChange={(e) => setFilterKategori(e.target.value as any)}
+            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-blue-700 focus:outline-hidden"
+          >
+            <option value="ALL">Semua Kategori</option>
+            <option value="APEL">Apel Sekolah (Pagi/Siang)</option>
+            <option value="KELAS">KBM Kelas Mengajar</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold text-slate-600 mb-1">
             Rombel / Kelas
           </label>
           <select
@@ -286,7 +335,7 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
 
         <div>
           <label className="block text-[10px] font-bold text-slate-600 mb-1">
-            Sesi Presensi
+            Sesi / Mapel
           </label>
           <select
             value={filterSesi}
@@ -294,8 +343,8 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
             className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden"
           >
             <option value="ALL">Semua Sesi</option>
-            <option value="Pagi">Sesi Pagi</option>
-            <option value="Siang">Sesi Siang</option>
+            <option value="Pagi">Apel Pagi</option>
+            <option value="Siang">Apel Siang</option>
           </select>
         </div>
 
@@ -331,11 +380,12 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                   </button>
                 </th>
                 <th className="p-3 w-28">Tanggal</th>
-                <th className="p-3 w-24">Waktu</th>
+                <th className="p-3 w-20">Waktu</th>
+                <th className="p-3 w-28">Kategori</th>
                 <th className="p-3 w-28">NISN</th>
                 <th className="p-3">Nama Siswa</th>
-                <th className="p-3 w-24">Kelas</th>
-                <th className="p-3 w-24">Sesi</th>
+                <th className="p-3 w-20">Kelas</th>
+                <th className="p-3 w-28">Sesi / Mapel</th>
                 <th className="p-3">Status Kehadiran</th>
                 <th className="p-3 w-20 text-center">Aksi</th>
               </tr>
@@ -343,17 +393,19 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="p-6 text-center text-slate-400 italic">
+                  <td colSpan={10} className="p-6 text-center text-slate-400 italic">
                     Belum ada catatan presensi sesuai kriteria filter saat ini.
                   </td>
                 </tr>
               ) : (
                 filtered.map((a) => {
                   const isSelected = selectedIds.includes(a.id);
-                  const badgeColor =
-                    a.sesi === 'Pagi'
-                      ? 'bg-blue-50 text-blue-700 border-blue-200'
-                      : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                  const isKbm = a.kategori === 'KELAS';
+                  const badgeColor = isKbm
+                    ? 'bg-purple-50 text-purple-700 border-purple-200'
+                    : a.sesi === 'Pagi'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200';
                   return (
                     <tr
                       key={a.id}
@@ -376,6 +428,17 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                       </td>
                       <td className="p-3 font-mono text-slate-500">{a.tanggal}</td>
                       <td className="p-3 font-mono font-bold text-slate-900">{a.waktu}</td>
+                      <td className="p-3">
+                        {isKbm ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-50 text-teal-700 border border-teal-200 inline-block">
+                            KBM Kelas
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-700 border border-blue-200 inline-block">
+                            Apel Sekolah
+                          </span>
+                        )}
+                      </td>
                       <td
                         onClick={() => {
                           const s = students.find((st) => st.nisn === a.nisn);
@@ -398,11 +461,31 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                       </td>
                       <td className="p-3 text-slate-600">{a.kelas}</td>
                       <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeColor}`}>
-                          {a.sesi}
-                        </span>
+                        {isKbm ? (
+                          <div>
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200 truncate block max-w-[130px]" title={a.mapel}>
+                              {a.mapel || 'Mapel'}
+                            </span>
+                            {a.pertemuanKe && (
+                              <span className="text-[9px] text-slate-500 font-medium mt-0.5 block">
+                                Pertemuan Ke-{a.pertemuanKe}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${badgeColor}`}>
+                            Apel {a.sesi}
+                          </span>
+                        )}
                       </td>
-                      <td className="p-3 font-medium text-slate-800">{a.status}</td>
+                      <td className="p-3 font-medium text-slate-800">
+                        {a.status}
+                        {a.materiPokok && (
+                          <span className="text-[10px] text-slate-400 block italic">
+                            Materi: {a.materiPokok}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3 text-center">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
@@ -429,7 +512,7 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                             onClick={() => {
                               onShowConfirm(
                                 'Hapus Catatan',
-                                `Hapus catatan presensi ${a.nama} (${a.sesi})?`,
+                                `Hapus catatan presensi ${a.nama} (${a.kategori === 'KELAS' ? a.mapel : a.sesi})?`,
                                 async () => {
                                   await onDeleteAttendance(a.id);
                                   onShowNotice('Terhapus', 'Catatan presensi berhasil dihapus.', 'success');
@@ -520,6 +603,85 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                 </div>
               </div>
 
+              {/* Kategori Switcher (Apel vs KBM Kelas) */}
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Kategori Presensi
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormKategori('APEL')}
+                    className={`py-2 px-3 rounded-xl border text-center font-bold transition cursor-pointer ${
+                      formKategori === 'APEL'
+                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Presensi Apel (Pagi/Siang)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormKategori('KELAS')}
+                    className={`py-2 px-3 rounded-xl border text-center font-bold transition cursor-pointer ${
+                      formKategori === 'KELAS'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    Presensi KBM Kelas
+                  </button>
+                </div>
+              </div>
+
+              {formKategori === 'KELAS' && (
+                <div className="p-3 bg-teal-50/60 border border-teal-200 rounded-xl space-y-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] text-teal-900 font-bold mb-1">
+                        Mata Pelajaran (Mapel)
+                      </label>
+                      <select
+                        value={formMapel}
+                        onChange={(e) => setFormMapel(e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-semibold text-slate-800 focus:outline-hidden"
+                      >
+                        {OFFICIAL_SUBJECTS.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-teal-900 font-bold mb-1">
+                        Pertemuan Ke-
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={formPertemuanKe}
+                        onChange={(e) => setFormPertemuanKe(Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs font-bold text-center focus:outline-hidden"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-teal-900 font-bold mb-1">
+                      Materi Pokok / Pembahasan
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Contoh: Bab 2 Aljabar & Persamaan Linear..."
+                      value={formMateriPokok}
+                      onChange={(e) => setFormMateriPokok(e.target.value)}
+                      className="w-full px-2.5 py-1.5 bg-white border border-teal-300 rounded-lg text-xs focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">
@@ -530,8 +692,8 @@ export const AttendanceManageView: React.FC<AttendanceManageViewProps> = ({
                     onChange={(e) => setFormSesi(e.target.value as AttendanceSession)}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden font-semibold"
                   >
-                    <option value="Pagi">Sesi Pagi</option>
-                    <option value="Siang">Sesi Siang</option>
+                    <option value="Pagi">Apel Pagi / Jam Pagi</option>
+                    <option value="Siang">Apel Siang / Jam Siang</option>
                   </select>
                 </div>
                 <div>

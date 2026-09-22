@@ -904,6 +904,7 @@ export default function App() {
                 dateString={dateFormatted}
                 dayKey={currentDayKey}
                 onRecordAttendance={handleRecordAttendance}
+                onDeleteAttendance={handleDeleteAttendance}
                 onShowNotice={showNotice}
                 onShowConfirm={showConfirm}
               />

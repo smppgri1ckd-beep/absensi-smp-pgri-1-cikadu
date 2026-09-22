@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const adminMenuItems: { id: ViewType; label: string; icon: React.ReactNode; group: string }[] = [
     {
       id: 'kiosk',
-      label: 'Mode Kiosk Presensi',
+      label: 'Kiosk Presensi Apel (Pagi/Siang)',
       icon: <Camera className="w-4 h-4 text-blue-600" />,
       group: 'Operasional',
     },
@@ -52,6 +52,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Dashboard Admin Real-Time',
       icon: <LayoutDashboard className="w-4 h-4 text-indigo-600" />,
       group: 'Operasional',
+    },
+    {
+      id: 'portalGuru',
+      label: 'Presensi KBM Kelas (Guru)',
+      icon: <GraduationCap className="w-4 h-4 text-teal-600" />,
+      group: 'Pengguna & Guru',
     },
     {
       id: 'kelolaGuru',
@@ -107,33 +113,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const guruMenuItems: { id: ViewType; label: string; icon: React.ReactNode; group: string }[] = [
     {
       id: 'portalGuru',
-      label: 'Portal & Presensi Kelas',
+      label: 'Presensi KBM Kelas Mengajar',
       icon: <GraduationCap className="w-4 h-4 text-emerald-600" />,
-      group: 'Akses Guru',
+      group: 'Aktivitas Mengajar',
     },
     {
       id: 'guruIzinAbsen',
       label: 'Input Izin & Sakit Siswa',
       icon: <Edit3 className="w-4 h-4 text-blue-600" />,
-      group: 'Akses Guru',
-    },
-    {
-      id: 'kalenderHeb',
-      label: 'Kalender Akademik HEB',
-      icon: <CalendarDays className="w-4 h-4 text-purple-600" />,
-      group: 'Informasi Sekolah',
+      group: 'Aktivitas Mengajar',
     },
     {
       id: 'kiosk',
-      label: 'Tampilan Scanner Kiosk',
+      label: 'Kiosk Presensi Apel (Pagi/Siang)',
       icon: <Camera className="w-4 h-4 text-blue-500" />,
-      group: 'Informasi Sekolah',
+      group: 'Informasi & Apel Sekolah',
     },
     {
       id: 'pantauPublik',
       label: 'Pantau Presensi Ortu',
       icon: <Users className="w-4 h-4 text-sky-600" />,
-      group: 'Informasi Sekolah',
+      group: 'Informasi & Apel Sekolah',
+    },
+    {
+      id: 'kalenderHeb',
+      label: 'Kalender Akademik HEB',
+      icon: <CalendarDays className="w-4 h-4 text-purple-600" />,
+      group: 'Informasi & Apel Sekolah',
     },
   ];
 

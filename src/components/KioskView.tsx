@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Student, AttendanceRecord, SchoolConfig, AttendanceSession } from '../types';
 import { playBeep } from '../utils/audio';
+import { AttendanceFeedbackModal, AttendanceFeedbackModalData } from './AttendanceFeedbackModal';
 
 interface KioskViewProps {
   students: Student[];
@@ -49,6 +50,7 @@ export const KioskView: React.FC<KioskViewProps> = ({
     record: AttendanceRecord;
     timestamp: string;
   } | null>(null);
+  const [feedbackModalData, setFeedbackModalData] = useState<AttendanceFeedbackModalData | null>(null);
   const [scanCooldown, setScanCooldown] = useState(false);
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
@@ -178,13 +180,25 @@ export const KioskView: React.FC<KioskViewProps> = ({
 
     const today = new Date().toISOString().split('T')[0];
     const already = attendance.find(
-      (a) => a.nisn.trim() === cleanNisn && a.tanggal === today && a.sesi === activeSession
+      (a) =>
+        a.nisn.trim() === cleanNisn &&
+        a.tanggal === today &&
+        a.sesi === activeSession &&
+        (a.kategori === 'APEL' || !a.kategori)
     );
 
     if (already) {
       playBeep('warning');
       setScannerStatus(`${student.nama} sudah presensi Sesi ${activeSession} hari ini (${already.waktu} WIB).`);
-      setTimeout(() => setScanCooldown(false), 2200);
+      setFeedbackModalData({
+        isOpen: true,
+        type: 'already',
+        student,
+        record: already,
+        contextTitle: `Apel ${activeSession}`,
+        autoCloseSeconds: 4,
+      });
+      setTimeout(() => setScanCooldown(false), 3000);
       return;
     }
 
@@ -201,6 +215,7 @@ export const KioskView: React.FC<KioskViewProps> = ({
       kelas: student.kelas,
       sesi: activeSession,
       status,
+      kategori: 'APEL',
     };
 
     playBeep('success');
@@ -212,11 +227,19 @@ export const KioskView: React.FC<KioskViewProps> = ({
         timestamp: time,
       });
       setScannerStatus(`Presensi ${student.nama} (${student.kelas}) BERHASIL dicatat.`);
+      setFeedbackModalData({
+        isOpen: true,
+        type: 'success',
+        student,
+        record,
+        contextTitle: `Apel ${activeSession}`,
+        autoCloseSeconds: 3,
+      });
     }
 
     setTimeout(() => {
       setScanCooldown(false);
-    }, 2000);
+    }, 2500);
   };
 
   useEffect(() => {
@@ -257,10 +280,10 @@ export const KioskView: React.FC<KioskViewProps> = ({
               )}
             </div>
             <h3 className="text-base sm:text-lg font-bold">
-              Mode Kiosk Pemindaian QR Kartu Siswa
+              Mode Kiosk Presensi Apel Sekolah (Pagi & Siang)
             </h3>
             <p className="text-xs text-blue-100/90 leading-relaxed">
-              Jadwal Aktif: <strong>Sesi Pagi ({config.schedule.morningStart} - {config.schedule.morningOnTimeEnd} WIB)</strong> &bull; <strong>Sesi Siang ({config.schedule.afternoonStart} - {config.schedule.afternoonOnTimeEnd} WIB)</strong>.
+              Jadwal Aktif: <strong>Apel Pagi ({config.schedule.morningStart} - {config.schedule.morningOnTimeEnd} WIB)</strong> &bull; <strong>Apel Siang ({config.schedule.afternoonStart} - {config.schedule.afternoonOnTimeEnd} WIB)</strong>.
             </p>
           </div>
         </div>
@@ -302,18 +325,18 @@ export const KioskView: React.FC<KioskViewProps> = ({
                 Pemindai QR Kamera
               </h4>
             </div>
-            <div className="flex items-center gap-1 bg-slate-100 px-2 py-1 rounded-lg border border-slate-200">
+            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-lg border border-slate-200">
               <span className="text-[10px] text-slate-500 font-medium">Sesi:</span>
-              <span className="text-xs font-extrabold text-blue-700 font-mono">
-                {activeSession.toUpperCase()}
+              <span className={`text-xs font-black uppercase ${activeSession === 'Pagi' ? 'text-blue-700' : 'text-emerald-700'}`}>
+                Apel {activeSession}
               </span>
               <button
                 type="button"
                 onClick={onToggleSessionManual}
-                className="text-slate-400 hover:text-slate-700 ml-1 p-0.5 rounded transition hover:bg-slate-200"
-                title="Alihkan Sesi Manual"
+                className="text-slate-400 hover:text-slate-700 ml-1 p-0.5 rounded transition hover:bg-slate-200 cursor-pointer"
+                title="Alihkan Sesi Manual Antara Apel Pagi & Apel Siang"
               >
-                <ArrowRightLeft className="w-3 h-3" />
+                <ArrowRightLeft className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -505,6 +528,12 @@ export const KioskView: React.FC<KioskViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Professional Scan Feedback Modal */}
+      <AttendanceFeedbackModal
+        data={feedbackModalData}
+        onClose={() => setFeedbackModalData(null)}
+      />
     </div>
   );
 };

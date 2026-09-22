@@ -19,8 +19,12 @@ import {
   GraduationCap,
   Phone,
   Sparkles,
+  Camera,
+  Image as ImageIcon,
+  Upload,
 } from 'lucide-react';
 import { TeacherUser, SchoolConfig } from '../types';
+import { OFFICIAL_SUBJECTS } from '../constants/subjects';
 
 interface TeacherManageViewProps {
   teachers: TeacherUser[];
@@ -32,21 +36,7 @@ interface TeacherManageViewProps {
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
 
-const COMMON_SUBJECTS = [
-  'Pendidikan Agama Islam & BP',
-  'Pendidikan Pancasila & Kewarganegaraan (PPKn)',
-  'Bahasa Indonesia',
-  'Matematika',
-  'Ilmu Pengetahuan Alam (IPA)',
-  'Ilmu Pengetahuan Sosial (IPS)',
-  'Bahasa Inggris',
-  'Seni Budaya',
-  'Pendidikan Jasmani, Olahraga & Kesehatan (PJOK)',
-  'Prakarya / Kewirausahaan',
-  'Informatika / TIK',
-  'Bimbingan Konseling (BK)',
-  'Muatan Lokal (Bahasa Sunda)',
-];
+const COMMON_SUBJECTS = OFFICIAL_SUBJECTS;
 
 const CLASS_OPTIONS = [
   'Bukan Wali Kelas',
@@ -80,11 +70,29 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
   const [formNip, setFormNip] = useState('');
   const [formUsername, setFormUsername] = useState('');
   const [formPassword, setFormPassword] = useState('');
-  const [formMapel, setFormMapel] = useState(COMMON_SUBJECTS[0]);
+  const [formMapel, setFormMapel] = useState<string>(COMMON_SUBJECTS[0]);
   const [formWaliKelas, setFormWaliKelas] = useState('Bukan Wali Kelas');
   const [formKontak, setFormKontak] = useState('');
+  const [formNoHp, setFormNoHp] = useState('');
+  const [formFotoUrl, setFormFotoUrl] = useState('');
   const [formStatus, setFormStatus] = useState<'AKTIF' | 'NONAKTIF'>('AKTIF');
   const [showFormPassword, setShowFormPassword] = useState(false);
+
+  // File upload reader for teacher photo
+  const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) {
+      onShowNotice('Ukuran Terlalu Besar', 'Maksimal ukuran foto adalah 3MB.', 'warning');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFormFotoUrl(reader.result as string);
+      onShowNotice('Foto Berhasil Dipilih', 'Foto profil guru siap disimpan.', 'info');
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Reset password form state
   const [newPassword, setNewPassword] = useState('');
@@ -127,6 +135,8 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
     setFormMapel(COMMON_SUBJECTS[0]);
     setFormWaliKelas('Bukan Wali Kelas');
     setFormKontak('');
+    setFormNoHp('');
+    setFormFotoUrl('');
     setFormStatus('AKTIF');
     setShowFormPassword(true);
     setShowAddModal(true);
@@ -140,7 +150,10 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
     setFormPassword(t.password);
     setFormMapel(t.mapel);
     setFormWaliKelas(t.waliKelas || 'Bukan Wali Kelas');
-    setFormKontak(t.kontak || '');
+    const phone = t.kontak || t.noHp || '';
+    setFormKontak(phone);
+    setFormNoHp(phone);
+    setFormFotoUrl(t.fotoUrl || '');
     setFormStatus(t.status);
     setShowFormPassword(false);
   };
@@ -181,7 +194,9 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
       password: formPassword.trim(),
       mapel: formMapel.trim(),
       waliKelas: formWaliKelas === 'Bukan Wali Kelas' ? undefined : formWaliKelas,
-      kontak: formKontak.trim() || undefined,
+      kontak: formKontak.trim() || formNoHp.trim() || undefined,
+      noHp: formNoHp.trim() || formKontak.trim() || undefined,
+      fotoUrl: formFotoUrl.trim() || undefined,
       status: formStatus,
       createdAt: new Date().toISOString(),
     };
@@ -223,7 +238,9 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
       password: formPassword.trim(),
       mapel: formMapel.trim(),
       waliKelas: formWaliKelas === 'Bukan Wali Kelas' ? undefined : formWaliKelas,
-      kontak: formKontak.trim() || undefined,
+      kontak: formKontak.trim() || formNoHp.trim() || undefined,
+      noHp: formNoHp.trim() || formKontak.trim() || undefined,
+      fotoUrl: formFotoUrl.trim() || undefined,
       status: formStatus,
     };
 
@@ -493,9 +510,13 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
                         {idx + 1}
                       </td>
                       <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0">
-                            {t.nama.slice(0, 2).toUpperCase()}
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden border border-blue-200 shadow-2xs">
+                            {t.fotoUrl ? (
+                              <img src={t.fotoUrl} alt={t.nama} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{t.nama.slice(0, 2).toUpperCase()}</span>
+                            )}
                           </div>
                           <div>
                             <p className="font-extrabold text-slate-900 leading-tight">
