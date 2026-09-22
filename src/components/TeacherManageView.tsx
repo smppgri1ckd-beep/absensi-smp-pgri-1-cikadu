@@ -22,9 +22,13 @@ import {
   Camera,
   Image as ImageIcon,
   Upload,
+  FileSpreadsheet,
+  FileDown,
 } from 'lucide-react';
 import { TeacherUser, SchoolConfig } from '../types';
 import { OFFICIAL_SUBJECTS } from '../constants/subjects';
+import { TeacherImportModal } from './TeacherImportModal';
+import { downloadTeacherExcelTemplate } from '../utils/export';
 
 interface TeacherManageViewProps {
   teachers: TeacherUser[];
@@ -32,6 +36,8 @@ interface TeacherManageViewProps {
   onAddTeacher: (teacher: TeacherUser) => Promise<void>;
   onUpdateTeacher: (teacher: TeacherUser) => Promise<void>;
   onDeleteTeacher: (id: string) => Promise<void>;
+  onBatchImportTeachers?: (teachers: TeacherUser[]) => Promise<void>;
+  onBatchDeleteTeachers?: (ids: string[]) => Promise<void>;
   onShowNotice: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
@@ -54,12 +60,15 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
   onAddTeacher,
   onUpdateTeacher,
   onDeleteTeacher,
+  onBatchImportTeachers,
+  onBatchDeleteTeachers,
   onShowNotice,
   onShowConfirm,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'AKTIF' | 'NONAKTIF'>('ALL');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<TeacherUser | null>(null);
   const [resettingTeacher, setResettingTeacher] = useState<TeacherUser | null>(null);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
@@ -77,6 +86,22 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
   const [formFotoUrl, setFormFotoUrl] = useState('');
   const [formStatus, setFormStatus] = useState<'AKTIF' | 'NONAKTIF'>('AKTIF');
   const [showFormPassword, setShowFormPassword] = useState(false);
+
+  const toggleSubjectInForm = (subject: string) => {
+    const current = formMapel
+      .split(/[,/|]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const exists = current.includes(subject);
+    let updated: string[];
+    if (exists) {
+      updated = current.filter((s) => s !== subject);
+      if (updated.length === 0) updated = [COMMON_SUBJECTS[0]];
+    } else {
+      updated = [...current.filter((s) => s !== 'Semua Mata Pelajaran'), subject];
+    }
+    setFormMapel(updated.join(', '));
+  };
 
   // File upload reader for teacher photo
   const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,6 +339,21 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
     onShowNotice('Disalin ke Clipboard', `Data login untuk ${t.nama} siap dikirim melalui WhatsApp/Pesan.`, 'success');
   };
 
+  const handleDownloadTemplate = () => {
+    downloadTeacherExcelTemplate(config);
+    onShowNotice('Unduh Berhasil', 'Template Excel data guru berhasil diunduh.', 'success');
+  };
+
+  const handleBatchImport = async (newTeachers: TeacherUser[]) => {
+    if (onBatchImportTeachers) {
+      await onBatchImportTeachers(newTeachers);
+    } else {
+      for (const t of newTeachers) {
+        await onAddTeacher(t);
+      }
+    }
+  };
+
   const handleExportExcel = () => {
     if (teachers.length === 0) {
       onShowNotice('Data Kosong', 'Belum ada data akun guru untuk diekspor.', 'warning');
@@ -337,7 +377,7 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
         t.password,
         t.mapel,
         t.waliKelas || '-',
-        t.kontak || '-',
+        t.kontak || t.noHp || '-',
         t.status,
       ]);
     });
@@ -363,27 +403,47 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
                 Manajemen Akun Pengguna Guru
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Admin dapat membuat, mengelola kata sandi, dan mengatur hak akses akun guru pengajar & wali kelas.
+                Admin dapat membuat, mengelola kata sandi, impor Excel massal, dan mengatur hak akses akun guru.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Unduh format template Excel untuk data guru"
+          >
+            <FileDown className="w-4 h-4 text-indigo-600" />
+            <span>Template Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowImportModal(true)}
+            className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title="Impor data guru dari berkas Excel"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+            <span>Impor Excel</span>
+          </button>
+
           <button
             type="button"
             onClick={handleExportExcel}
-            className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-2xs"
+            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
             title="Ekspor daftar akun guru ke berkas Excel"
           >
-            <Download className="w-4 h-4 text-emerald-600" />
+            <Download className="w-4 h-4 text-slate-600" />
             <span>Ekspor Excel</span>
           </button>
 
           <button
             type="button"
             onClick={handleOpenAdd}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-xs cursor-pointer"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
             <span>+ Tambah Akun Guru</span>
@@ -558,18 +618,29 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
                       </td>
                       <td className="py-3.5 px-4">
                         <div>
-                          <p className="font-bold text-slate-800 flex items-center gap-1.5">
-                            <BookOpen className="w-3 h-3 text-blue-500 shrink-0" />
-                            <span>{t.mapel}</span>
-                          </p>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {t.mapel
+                              .split(/[,/|]+/)
+                              .map((s) => s.trim())
+                              .filter(Boolean)
+                              .map((sub, i) => (
+                                <span
+                                  key={i}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-bold text-[11px]"
+                                >
+                                  <BookOpen className="w-3 h-3 text-blue-600 shrink-0" />
+                                  <span>{sub}</span>
+                                </span>
+                              ))}
+                          </div>
                           {t.waliKelas && t.waliKelas !== 'Bukan Wali Kelas' ? (
-                            <span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 bg-amber-50 text-amber-800 rounded-md font-extrabold text-[10px] border border-amber-200">
+                            <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 bg-amber-50 text-amber-800 rounded-md font-extrabold text-[10px] border border-amber-200">
                               <GraduationCap className="w-3 h-3 text-amber-600" />
                               <span>Wali Kelas {t.waliKelas}</span>
                             </span>
                           ) : (
-                            <span className="text-[10px] text-slate-400 block mt-0.5">
-                              Guru Mapel
+                            <span className="text-[10px] text-slate-400 block mt-1">
+                              Guru Mata Pelajaran
                             </span>
                           )}
                         </div>
@@ -776,40 +847,64 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    Mata Pelajaran yang Diampu
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 font-bold">
+                    Mata Pelajaran yang Diampu (Bisa Lebih dari 1)
                   </label>
-                  <select
-                    value={formMapel}
-                    onChange={(e) => setFormMapel(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden"
-                  >
-                    {COMMON_SUBJECTS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Klik chip di bawah atau ketik langsung
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    Wali Kelas (Jika Ada)
-                  </label>
-                  <select
-                    value={formWaliKelas}
-                    onChange={(e) => setFormWaliKelas(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden"
-                  >
-                    {CLASS_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                <input
+                  type="text"
+                  placeholder="Contoh: Matematika, IPA, Informatika"
+                  value={formMapel}
+                  onChange={(e) => setFormMapel(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:outline-hidden focus:border-blue-500"
+                />
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {COMMON_SUBJECTS.map((s) => {
+                    const isSelected = formMapel
+                      .split(/[,/|]+/)
+                      .map((x) => x.trim().toLowerCase())
+                      .includes(s.toLowerCase());
+                    return (
+                      <button
+                        type="button"
+                        key={s}
+                        onClick={() => toggleSubjectInForm(s)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : '+ '}
+                        {s}
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Wali Kelas (Jika Ada)
+                </label>
+                <select
+                  value={formWaliKelas}
+                  onChange={(e) => setFormWaliKelas(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden focus:border-blue-500"
+                >
+                  {CLASS_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -967,40 +1062,64 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    Mata Pelajaran
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-slate-700 font-bold">
+                    Mata Pelajaran yang Diampu (Bisa Lebih dari 1)
                   </label>
-                  <select
-                    value={formMapel}
-                    onChange={(e) => setFormMapel(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden"
-                  >
-                    {COMMON_SUBJECTS.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    Klik chip di bawah atau ketik langsung
+                  </span>
                 </div>
 
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">
-                    Wali Kelas
-                  </label>
-                  <select
-                    value={formWaliKelas}
-                    onChange={(e) => setFormWaliKelas(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden"
-                  >
-                    {CLASS_OPTIONS.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
+                <input
+                  type="text"
+                  placeholder="Contoh: Matematika, IPA, Informatika"
+                  value={formMapel}
+                  onChange={(e) => setFormMapel(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:outline-hidden focus:border-blue-500"
+                />
+
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                  {COMMON_SUBJECTS.map((s) => {
+                    const isSelected = formMapel
+                      .split(/[,/|]+/)
+                      .map((x) => x.trim().toLowerCase())
+                      .includes(s.toLowerCase());
+                    return (
+                      <button
+                        type="button"
+                        key={s}
+                        onClick={() => toggleSubjectInForm(s)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer border ${
+                          isSelected
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                            : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : '+ '}
+                        {s}
+                      </button>
+                    );
+                  })}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 font-bold mb-1">
+                  Wali Kelas
+                </label>
+                <select
+                  value={formWaliKelas}
+                  onChange={(e) => setFormWaliKelas(e.target.value)}
+                  className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:outline-hidden focus:border-blue-500"
+                >
+                  {CLASS_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -1139,6 +1258,16 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* ===== MODAL: IMPORT DATA GURU EXCEL ===== */}
+      <TeacherImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        config={config}
+        existingTeachers={teachers}
+        onImport={handleBatchImport}
+        onShowNotice={onShowNotice}
+      />
     </div>
   );
 };

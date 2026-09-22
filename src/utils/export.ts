@@ -1,6 +1,6 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
-import { Student, AttendanceRecord, SchoolConfig } from '../types';
+import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from '../types';
 import { getSchoolLogoImage } from './imageLoader';
 
 export function exportStudentsToExcel(students: Student[]) {
@@ -532,4 +532,106 @@ export async function exportSingleStudentAttendancePDF(
 
   doc.save(`Presensi_${student.nisn}_${student.nama.replace(/\s+/g, '_')}.pdf`);
 }
+
+/**
+ * Download standard Excel template for bulk importing teachers
+ */
+export function downloadTeacherExcelTemplate(config?: SchoolConfig) {
+  const schoolName = config?.namaSekolah || 'Sekolah';
+  const wb = XLSX.utils.book_new();
+
+  const wsData = [
+    ['NIP / NUPTK', 'NAMA GURU & GELAR', 'USERNAME', 'PASSWORD', 'MATA PELAJARAN', 'WALI KELAS', 'NO HP / WHATSAPP', 'STATUS'],
+    ['198501152010011005', 'Drs. Budi Santoso, M.Pd.', 'budi.santoso', 'guru123', 'Matematika', 'VII-A', '081234567890', 'AKTIF'],
+    ['199008202015022003', 'Siti Rahmawati, S.Pd.', 'siti.rahmawati', 'guru123', 'Bahasa Indonesia', 'VIII-A', '085678901234', 'AKTIF'],
+    ['199203102019031008', 'Ahmad Fauzi, S.Pd.', 'ahmad.fauzi', 'guru123', 'Ilmu Pengetahuan Alam (IPA)', 'Bukan Wali Kelas', '087812345678', 'AKTIF'],
+    ['-', 'Nurul Hidayah, S.Pd.I.', 'nurul.hidayah', 'guru123', 'Pendidikan Agama Islam dan Budi Pekerti', 'IX-A', '081398765432', 'AKTIF'],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Column width formatting
+  ws['!cols'] = [
+    { wch: 22 }, // NIP
+    { wch: 32 }, // NAMA
+    { wch: 20 }, // USERNAME
+    { wch: 18 }, // PASSWORD
+    { wch: 36 }, // MAPEL
+    { wch: 18 }, // WALI KELAS
+    { wch: 20 }, // NO HP
+    { wch: 14 }, // STATUS
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'TEMPLATE_GURU');
+
+  // Sheet Petunjuk Pengisian
+  const petunjukData = [
+    ['PETUNJUK PENGISIAN TEMPLATE IMPOR DATA GURU'],
+    ['Aplikasi E-Presensi Sekolah'],
+    [],
+    ['KOLOM', 'KEBUTUHAN', 'KETERANGAN & CONTOH'],
+    ['NIP / NUPTK', 'Opsional', 'Isi NIP atau NUPTK guru. Jika belum ada NIP/GTT, isi dengan tanda strip (-) atau kosongkan.'],
+    ['NAMA GURU & GELAR', 'Wajib', 'Nama lengkap beserta gelar akademik guru (contoh: Drs. Budi Santoso, M.Pd.)'],
+    ['USERNAME', 'Wajib / Otomatis', 'Username untuk login portal guru. Jika dikosongkan, sistem akan membuatkan otomatis dari nama/NIP.'],
+    ['PASSWORD', 'Wajib / Otomatis', 'Kata sandi akun portal guru. Jika dikosongkan, kata sandi default adalah guru123.'],
+    ['MATA PELAJARAN', 'Wajib', 'Mata pelajaran yang diampu guru (contoh: Matematika, IPA, PJOK, dll.)'],
+    ['WALI KELAS', 'Opsional', 'Isi kode kelas binaan (contoh: VII-A, VIII-B) atau "Bukan Wali Kelas" / kosong jika bukan wali kelas.'],
+    ['NO HP / WHATSAPP', 'Opsional', 'Nomor telepon aktif / WhatsApp guru untuk kontak darurat & koordinasi.'],
+    ['STATUS', 'Wajib', 'Status keaktifan akun: AKTIF atau NONAKTIF (default: AKTIF).'],
+  ];
+
+  const wsPetunjuk = XLSX.utils.aoa_to_sheet(petunjukData);
+  wsPetunjuk['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 65 }];
+  XLSX.utils.book_append_sheet(wb, wsPetunjuk, 'PETUNJUK_PENGISIAN');
+
+  const dateStr = new Date().toISOString().split('T')[0];
+  XLSX.writeFile(wb, `Template_Impor_Guru_${schoolName.replace(/\s+/g, '_')}_${dateStr}.xlsx`);
+}
+
+/**
+ * Export full teacher list to Excel
+ */
+export function exportTeachersToExcel(teachers: TeacherUser[], config?: SchoolConfig) {
+  const schoolName = config?.namaSekolah || 'Sekolah';
+  const rows = [
+    ['DAFTAR AKUN PENGGUNA GURU - E-PRESENSI'],
+    [schoolName],
+    [`Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID', { dateStyle: 'full' })}`],
+    [],
+    ['NO', 'NIP / NUPTK', 'NAMA GURU & GELAR', 'USERNAME', 'PASSWORD', 'MATA PELAJARAN', 'WALI KELAS', 'NO HP / WHATSAPP', 'STATUS'],
+  ];
+
+  teachers.forEach((t, idx) => {
+    rows.push([
+      String(idx + 1),
+      t.nip || '-',
+      t.nama,
+      t.username,
+      t.password,
+      t.mapel,
+      t.waliKelas || 'Bukan Wali Kelas',
+      t.kontak || t.noHp || '-',
+      t.status,
+    ]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+
+  ws['!cols'] = [
+    { wch: 6 },
+    { wch: 22 },
+    { wch: 32 },
+    { wch: 20 },
+    { wch: 18 },
+    { wch: 32 },
+    { wch: 18 },
+    { wch: 20 },
+    { wch: 14 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'AKUN_GURU');
+  XLSX.writeFile(wb, `Daftar_Akun_Guru_${schoolName.replace(/\s+/g, '_')}.xlsx`);
+}
+
 

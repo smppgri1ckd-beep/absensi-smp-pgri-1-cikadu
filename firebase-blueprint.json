@@ -25,9 +25,57 @@
         "nama": { "type": "string", "description": "Nama siswa" },
         "kelas": { "type": "string", "description": "Kelas siswa" },
         "sesi": { "type": "string", "enum": ["Pagi", "Siang"], "description": "Sesi presensi" },
-        "status": { "type": "string", "description": "Status kehadiran siswa" }
+        "status": { "type": "string", "description": "Status kehadiran siswa" },
+        "kategori": { "type": "string", "description": "APEL atau KELAS" },
+        "mapel": { "type": "string", "description": "Mata pelajaran KBM" },
+        "pertemuanKe": { "type": "number", "description": "Pertemuan ke-N" },
+        "materiPokok": { "type": "string", "description": "Materi pokok pembelajaran" }
       },
       "required": ["id", "tanggal", "waktu", "nisn", "nama", "kelas", "sesi", "status"]
+    },
+    "TeachingJournal": {
+      "title": "TeachingJournal",
+      "description": "Learning session and teacher journal log per meeting",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique key for journal" },
+        "guruId": { "type": "string" },
+        "guruNama": { "type": "string" },
+        "guruNip": { "type": "string" },
+        "kelas": { "type": "string" },
+        "mapel": { "type": "string" },
+        "tanggal": { "type": "string" },
+        "pertemuanKe": { "type": "number" },
+        "jamPelajaran": { "type": "string" },
+        "materiPokok": { "type": "string" },
+        "kegiatanPembelajaran": { "type": "string" },
+        "catatanRefleksi": { "type": "string" },
+        "totalSiswa": { "type": "number" },
+        "hadir": { "type": "number" },
+        "terlambat": { "type": "number" },
+        "izin": { "type": "number" },
+        "sakit": { "type": "number" },
+        "alpa": { "type": "number" },
+        "persentaseKehadiran": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "guruId", "guruNama", "kelas", "mapel", "tanggal", "pertemuanKe", "materiPokok"]
+    },
+    "TeacherUser": {
+      "title": "TeacherUser",
+      "description": "Teacher account and subject assignment",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nip": { "type": "string" },
+        "nama": { "type": "string" },
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "mapel": { "type": "string" },
+        "waliKelas": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "nama", "username", "password", "mapel"]
     },
     "SchoolConfig": {
       "title": "SchoolConfig",
@@ -64,6 +112,14 @@
     "/presensi/{presensiId}": {
       "schema": { "$ref": "#/entities/AttendanceRecord" },
       "description": "Collection of recorded student attendance"
+    },
+    "/guru_users/{teacherId}": {
+      "schema": { "$ref": "#/entities/TeacherUser" },
+      "description": "Collection of teacher accounts"
+    },
+    "/jurnal_mengajar/{journalId}": {
+      "schema": { "$ref": "#/entities/TeachingJournal" },
+      "description": "Collection of teacher learning journals and meeting logs"
     },
     "/pengaturan/identitas_sekolah": {
       "schema": { "$ref": "#/entities/SchoolConfig" },

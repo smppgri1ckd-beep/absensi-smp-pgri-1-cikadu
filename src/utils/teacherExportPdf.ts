@@ -1,5 +1,12 @@
 import { jsPDF } from 'jspdf';
-import { Student, AttendanceRecord, SchoolConfig, TeacherUser, AttendanceCategory } from '../types';
+import {
+  Student,
+  AttendanceRecord,
+  SchoolConfig,
+  TeacherUser,
+  AttendanceCategory,
+  TeachingJournal,
+} from '../types';
 import { getSchoolLogoImage } from './imageLoader';
 
 export interface TeacherDailyPdfOptions {
@@ -7,8 +14,15 @@ export interface TeacherDailyPdfOptions {
   mapel?: string;
   pertemuanKe?: number;
   materiPokok?: string;
+  jamPelajaran?: string;
+  kegiatanPembelajaran?: string;
+  catatanRefleksi?: string;
 }
 
+/**
+ * 1. LAPORAN PRESENSI & KBM PER PERTEMUAN / MATERI
+ * Menampilkan detail 1 sesi pertemuan beserta materi pokok, kegiatan pembelajaran, catatan, dan daftar kehadiran siswa lengkap.
+ */
 export async function exportTeacherDailyPDF(
   config: SchoolConfig,
   teacher: TeacherUser,
@@ -27,8 +41,11 @@ export async function exportTeacherDailyPDF(
 
   const isKelas = options?.kategori === 'KELAS';
   const displayMapel = options?.mapel || teacher.mapel;
-  const pertemuan = options?.pertemuanKe;
+  const pertemuan = options?.pertemuanKe || 1;
   const materi = options?.materiPokok;
+  const jam = options?.jamPelajaran;
+  const kegiatan = options?.kegiatanPembelajaran;
+  const catatan = options?.catatanRefleksi;
 
   const pageWidth = 210;
   const margin = 12;
@@ -75,32 +92,65 @@ export async function exportTeacherDailyPDF(
   doc.line(margin, y, pageWidth - margin, y);
   doc.setLineWidth(0.3);
   doc.line(margin, y + 0.8, pageWidth - margin, y + 0.8);
-  y += 7;
+  y += 6;
 
   // Title
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   const titleText = isKelas
-    ? "LAPORAN PRESENSI KEGIATAN BELAJAR MENGAJAR (KBM KELAS)"
-    : "LAPORAN HARIAN PRESENSI SISWA (APEL SEKOLAH)";
+    ? "LAPORAN PRESENSI & JURNAL KBM TATAP MUKA KELAS"
+    : "LAPORAN HARIAN PRESENSI SISWA (APEL KEDISIPLINAN)";
   doc.text(titleText, pageWidth / 2, y, { align: 'center' });
   y += 4;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   const subTitle = isKelas
-    ? `Kelas: ${className}  |  Mapel: ${displayMapel}  |  Pertemuan Ke: ${pertemuan || 1}  |  Tanggal: ${dateStr}`
+    ? `Kelas / Rombel: ${className}   |   Mata Pelajaran: ${displayMapel}   |   Pertemuan Ke-${pertemuan}   |   Tanggal: ${dateStr}`
     : `Kelas / Rombel: ${className}   |   Sesi: ${session === 'Pagi' ? 'Apel Pagi' : 'Apel Siang'}   |   Tanggal: ${dateStr}`;
   doc.text(subTitle, pageWidth / 2, y, { align: 'center' });
-  y += 6;
+  y += 5.5;
 
-  // Info Block (Guru Pengajar)
-  doc.setFontSize(8);
-  doc.text(`Guru Pengajar: ${teacher.nama} (${displayMapel})`, margin, y);
-  doc.text(`NIP: ${teacher.nip || '-'}`, margin, y + 4);
-  if (isKelas && materi) {
-    doc.text(`Materi Pokok / Pembahasan: ${materi}`, margin, y + 8);
-    y += 4;
+  // Info Block (Guru Pengajar & Data Pembelajaran)
+  doc.setFillColor(248, 250, 252);
+  doc.rect(margin, y, pageWidth - (margin * 2), isKelas ? 24 : 12, 'F');
+  doc.setDrawColor(226, 232, 240);
+  doc.setLineWidth(0.2);
+  doc.rect(margin, y, pageWidth - (margin * 2), isKelas ? 24 : 12);
+
+  doc.setFontSize(7.5);
+  doc.setFont('helvetica', 'bold');
+  doc.text("Guru Pengajar:", margin + 3, y + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${teacher.nama} (NIP: ${teacher.nip || '-'})`, margin + 25, y + 4);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text("Hari / Tanggal:", margin + 110, y + 4);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${dateStr} ${jam ? `(${jam})` : ''}`, margin + 132, y + 4);
+
+  if (isKelas) {
+    doc.setFont('helvetica', 'bold');
+    doc.text("Mata Pelajaran:", margin + 3, y + 8.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`${displayMapel} (Pertemuan Ke-${pertemuan})`, margin + 25, y + 8.5);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text("Materi Pokok:", margin + 3, y + 13);
+    doc.setFont('helvetica', 'normal');
+    const materiText = materi || 'Materi pembelajaran pertemuan tatap muka';
+    doc.text(materiText.length > 85 ? materiText.substring(0, 83) + '...' : materiText, margin + 25, y + 13);
+
+    if (kegiatan || catatan) {
+      doc.setFont('helvetica', 'bold');
+      doc.text("Kegiatan / Catatan:", margin + 3, y + 17.5);
+      doc.setFont('helvetica', 'normal');
+      const noteText = [kegiatan, catatan].filter(Boolean).join(' | ') || '-';
+      doc.text(noteText.length > 85 ? noteText.substring(0, 83) + '...' : noteText, margin + 25, y + 17.5);
+    }
+    y += 26;
+  } else {
+    y += 14;
   }
 
   // Filter attendance for date and session (and matching mapel if KELAS)
@@ -108,16 +158,16 @@ export async function exportTeacherDailyPDF(
     if (a.tanggal !== dateStr) return false;
     if (isKelas) {
       if (a.kategori === 'KELAS') {
-        return (
-          (!a.mapel || a.mapel === displayMapel) &&
-          (a.pertemuanKe === undefined || a.pertemuanKe === (pertemuan || 1))
-        );
+        const mapelMatch = !a.mapel || a.mapel.trim().toLowerCase() === displayMapel.trim().toLowerCase();
+        const pertemuanMatch = a.pertemuanKe === undefined || a.pertemuanKe === pertemuan;
+        return mapelMatch && pertemuanMatch;
       }
       return a.sesi === session;
     } else {
       return (a.kategori === 'APEL' || !a.kategori) && a.sesi === session;
     }
   });
+
   const recMap = new Map<string, AttendanceRecord>();
   dateSessionRecords.forEach((r) => recMap.set(r.nisn, r));
 
@@ -148,18 +198,20 @@ export async function exportTeacherDailyPDF(
   const totalHadirSemua = hadir + terlambat;
   const persen = totalSiswa > 0 ? Math.round((totalHadirSemua / totalSiswa) * 100) : 0;
 
-  doc.text(`Tingkat Kehadiran: ${persen}% (${totalHadirSemua} dari ${totalSiswa} Siswa)`, pageWidth - margin, y, { align: 'right' });
-  doc.text(`Hadir: ${hadir} | Terlambat: ${terlambat} | Izin: ${izin} | Sakit: ${sakit} | Alpa: ${alpa}`, pageWidth - margin, y + 4, { align: 'right' });
-  y += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.text(`Tingkat Kehadiran: ${persen}% (${totalHadirSemua} dari ${totalSiswa} Siswa Hadir)`, margin, y + 3.5);
+  doc.text(`Hadir: ${hadir}  |  Terlambat: ${terlambat}  |  Izin: ${izin}  |  Sakit: ${sakit}  |  Alpa: ${alpa}`, pageWidth - margin, y + 3.5, { align: 'right' });
+  y += 6;
 
   // Table header
   const cols = [
     { title: "No", width: 10, align: 'center' as const },
-    { title: "NISN", width: 28, align: 'center' as const },
-    { title: "Nama Lengkap Siswa", width: 70, align: 'left' as const },
+    { title: "NISN", width: 26, align: 'center' as const },
+    { title: "Nama Lengkap Siswa", width: 68, align: 'left' as const },
     { title: "L/P", width: 12, align: 'center' as const },
     { title: "Waktu", width: 22, align: 'center' as const },
-    { title: "Status Kehadiran", width: 44, align: 'center' as const },
+    { title: "Status Kehadiran", width: 48, align: 'center' as const },
   ];
 
   const tableStartX = margin;
@@ -167,27 +219,27 @@ export async function exportTeacherDailyPDF(
 
   // Draw Header Row
   doc.setFillColor(241, 245, 249);
-  doc.rect(tableStartX, y, pageWidth - (margin * 2), 7, 'F');
+  doc.rect(tableStartX, y, pageWidth - (margin * 2), 6.5, 'F');
   doc.setDrawColor(50, 50, 50);
   doc.setLineWidth(0.2);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
 
   cols.forEach((col) => {
-    doc.rect(currentX, y, col.width, 7);
+    doc.rect(currentX, y, col.width, 6.5);
     const textX = col.align === 'center' ? currentX + col.width / 2 : currentX + 2;
-    doc.text(col.title, textX, y + 4.8, { align: col.align });
+    doc.text(col.title, textX, y + 4.3, { align: col.align });
     currentX += col.width;
   });
-  y += 7;
+  y += 6.5;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
+  doc.setFontSize(7);
 
   sortedStudents.forEach((siswa, index) => {
     // Check if new page is needed
-    if (y > 255) {
+    if (y > 260) {
       doc.addPage();
       y = 15;
     }
@@ -197,7 +249,7 @@ export async function exportTeacherDailyPDF(
     const statusText = rec ? rec.status : 'Alpa (Belum Hadir)';
 
     currentX = tableStartX;
-    const rowHeight = 5.8;
+    const rowHeight = 5.4;
 
     const rowData = [
       String(index + 1),
@@ -217,7 +269,7 @@ export async function exportTeacherDailyPDF(
     cols.forEach((col, cIdx) => {
       doc.rect(currentX, y, col.width, rowHeight);
       const textX = col.align === 'center' ? currentX + col.width / 2 : currentX + 2;
-      doc.text(rowData[cIdx], textX, y + 4.1, { align: col.align });
+      doc.text(rowData[cIdx], textX, y + 3.8, { align: col.align });
       currentX += col.width;
     });
 
@@ -229,38 +281,481 @@ export async function exportTeacherDailyPDF(
     doc.addPage();
     y = 20;
   } else {
-    y += 10;
+    y += 8;
   }
 
   const leftSignX = margin + 25;
   const rightSignX = pageWidth - margin - 35;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
 
   // Left Signature (Headmaster)
   doc.text("Mengetahui,", leftSignX, y, { align: 'center' });
-  doc.text("Kepala Sekolah,", leftSignX, y + 4, { align: 'center' });
+  doc.text("Kepala Sekolah,", leftSignX, y + 3.5, { align: 'center' });
 
   // Right Signature (Teacher)
   const kotaDate = `${config.kota || 'Cianjur'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
   doc.text(kotaDate, rightSignX, y, { align: 'center' });
-  doc.text("Guru Mata Pelajaran / Wali Kelas,", rightSignX, y + 4, { align: 'center' });
+  doc.text("Guru Mata Pelajaran,", rightSignX, y + 3.5, { align: 'center' });
 
-  y += 20;
+  y += 18;
 
   // Headmaster Name
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 4, { align: 'center' });
+  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
 
   // Teacher Name
   doc.setFont('helvetica', 'bold');
   doc.text(teacher.nama, rightSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 4, { align: 'center' });
+  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
 
   const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
-  doc.save(`Laporan_Presensi_${className}_${dateStr}_${cleanSchool}.pdf`);
+  const safeMapel = displayMapel.replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Laporan_KBM_${className}_${safeMapel}_P${pertemuan}_${dateStr}_${cleanSchool}.pdf`);
+}
+
+/**
+ * 2. BUKU AGENDA & JURNAL PEMBELAJARAN GURU (REKAP PERTEMUAN / AGENDA MENGAJAR)
+ * Menghasilkan tabel agenda mengajar resmi berisi seluruh pertemuan/materi dalam satu semester/periode.
+ */
+export async function exportTeacherJournalBookPDF(
+  config: SchoolConfig,
+  teacher: TeacherUser,
+  className: string,
+  mapel: string,
+  journals: TeachingJournal[]
+) {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4', // 297 x 210 mm
+  });
+
+  const pageWidth = 297;
+  const margin = 12;
+  let y = 12;
+
+  // Render Logo Sekolah in Kop Surat
+  let logoImg: HTMLImageElement | string | null = null;
+  try {
+    logoImg = await getSchoolLogoImage(config.logoUrl);
+  } catch {
+    logoImg = null;
+  }
+
+  if (logoImg) {
+    try {
+      doc.addImage(logoImg as any, 'PNG', margin + 1, 10, 18, 18);
+    } catch (e) {
+      console.warn('Could not render logo to PDF:', e);
+    }
+  }
+
+  const textCenterX = pageWidth / 2;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text("PERWAKILAN YAYASAN PEMBINA LEMBAGA PENDIDIKAN PGRI (YPLP PGRI) KABUPATEN CIANJUR", textCenterX, y, { align: 'center' });
+  y += 4;
+  doc.setFontSize(12);
+  doc.text(config.namaSekolah.toUpperCase(), textCenterX, y, { align: 'center' });
+  y += 3.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text(`${config.alamat} | NPSN: ${config.npsn} | ${config.kontak}`, textCenterX, y, { align: 'center' });
+  y += 3.5;
+
+  // Double border line
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, pageWidth - margin, y);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y + 0.6, pageWidth - margin, y + 0.6);
+  y += 5.5;
+
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text("BUKU AGENDA & JURNAL PEMBELAJARAN GURU (KBM TATAP MUKA)", textCenterX, y, { align: 'center' });
+  y += 4;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(`Kelas / Rombel: ${className === 'ALL' ? 'Semua Kelas' : `Kelas ${className}`}   |   Mata Pelajaran: ${mapel}   |   Guru Pengajar: ${teacher.nama} (NIP: ${teacher.nip || '-'})`, textCenterX, y, { align: 'center' });
+  y += 5.5;
+
+  // Sort journals by pertemuanKe / tanggal
+  const sortedJournals = [...journals].sort((a, b) => {
+    if (a.pertemuanKe !== b.pertemuanKe) return a.pertemuanKe - b.pertemuanKe;
+    return a.tanggal.localeCompare(b.tanggal);
+  });
+
+  // Table Cols
+  const cols = [
+    { title: "No", width: 10, align: 'center' as const },
+    { title: "Pertemuan", width: 18, align: 'center' as const },
+    { title: "Hari / Tanggal", width: 28, align: 'center' as const },
+    { title: "Jam Ke", width: 20, align: 'center' as const },
+    { title: "Kelas", width: 16, align: 'center' as const },
+    { title: "Materi Pokok / Kompetensi Dasar", width: 75, align: 'left' as const },
+    { title: "Kegiatan Pembelajaran & Catatan", width: 62, align: 'left' as const },
+    { title: "Kehadiran (H/S/I/A)", width: 26, align: 'center' as const },
+    { title: "Paraf", width: 18, align: 'center' as const },
+  ];
+
+  const tableStartX = margin;
+  let currentX = tableStartX;
+
+  // Header
+  doc.setFillColor(241, 245, 249);
+  doc.rect(tableStartX, y, pageWidth - (margin * 2), 7, 'F');
+  doc.setDrawColor(50, 50, 50);
+  doc.setLineWidth(0.2);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+
+  cols.forEach((col) => {
+    doc.rect(currentX, y, col.width, 7);
+    const textX = col.align === 'center' ? currentX + col.width / 2 : currentX + 2;
+    doc.text(col.title, textX, y + 4.5, { align: col.align });
+    currentX += col.width;
+  });
+  y += 7;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+
+  if (sortedJournals.length === 0) {
+    doc.rect(tableStartX, y, pageWidth - (margin * 2), 12);
+    doc.text("Belum ada data jurnal pembelajaran yang tersimpan untuk filter ini.", pageWidth / 2, y + 7, { align: 'center' });
+    y += 12;
+  } else {
+    sortedJournals.forEach((jrn, index) => {
+      if (y > 175) {
+        doc.addPage();
+        y = 15;
+      }
+
+      currentX = tableStartX;
+      const rowHeight = 7.5;
+
+      const hadirSummary = `${jrn.hadir + jrn.terlambat}H / ${jrn.sakit}S / ${jrn.izin}I / ${jrn.alpa}A`;
+      const combinedNotes = [jrn.kegiatanPembelajaran, jrn.catatanRefleksi].filter(Boolean).join(' - ') || '-';
+
+      const rowData = [
+        String(index + 1),
+        `Ke-${jrn.pertemuanKe}`,
+        jrn.tanggal,
+        jrn.jamPelajaran || '-',
+        jrn.kelas,
+        jrn.materiPokok.length > 50 ? jrn.materiPokok.substring(0, 48) + '...' : jrn.materiPokok,
+        combinedNotes.length > 45 ? combinedNotes.substring(0, 43) + '...' : combinedNotes,
+        hadirSummary,
+        '✓',
+      ];
+
+      if (index % 2 === 1) {
+        doc.setFillColor(250, 250, 250);
+        doc.rect(tableStartX, y, pageWidth - (margin * 2), rowHeight, 'F');
+      }
+
+      cols.forEach((col, cIdx) => {
+        doc.rect(currentX, y, col.width, rowHeight);
+        const textX = col.align === 'center' ? currentX + col.width / 2 : currentX + 2;
+        doc.text(rowData[cIdx], textX, y + 4.8, { align: col.align });
+        currentX += col.width;
+      });
+
+      y += rowHeight;
+    });
+  }
+
+  // Signatures
+  if (y > 165) {
+    doc.addPage();
+    y = 15;
+  } else {
+    y += 7;
+  }
+
+  const leftSignX = margin + 40;
+  const rightSignX = pageWidth - margin - 50;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+
+  doc.text("Mengetahui,", leftSignX, y, { align: 'center' });
+  doc.text("Kepala Sekolah,", leftSignX, y + 3.5, { align: 'center' });
+
+  const kotaDate = `${config.kota || 'Cianjur'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  doc.text(kotaDate, rightSignX, y, { align: 'center' });
+  doc.text("Guru Mata Pelajaran,", rightSignX, y + 3.5, { align: 'center' });
+
+  y += 18;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(teacher.nama, rightSignX, y, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
+
+  const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
+  const safeMapel = mapel.replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Buku_Agenda_Jurnal_Guru_${className}_${safeMapel}_${cleanSchool}.pdf`);
+}
+
+/**
+ * 3. MATRIKS REKAPITULASI PRESENSI SISWA PER PERTEMUAN (P1 - P16)
+ * Menampilkan matriks presensi siswa baris-per-siswa kolom-per-pertemuan beserta persentase akhir.
+ */
+export async function exportTeacherAttendanceMatrixPDF(
+  config: SchoolConfig,
+  teacher: TeacherUser,
+  className: string,
+  mapel: string,
+  students: Student[],
+  journals: TeachingJournal[],
+  attendance: AttendanceRecord[]
+) {
+  const doc = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4', // 297 x 210 mm
+  });
+
+  const pageWidth = 297;
+  const margin = 12;
+  let y = 12;
+
+  let logoImg: HTMLImageElement | string | null = null;
+  try {
+    logoImg = await getSchoolLogoImage(config.logoUrl);
+  } catch {
+    logoImg = null;
+  }
+
+  if (logoImg) {
+    try {
+      doc.addImage(logoImg as any, 'PNG', margin + 1, 10, 18, 18);
+    } catch (e) {
+      console.warn('Could not render logo to PDF:', e);
+    }
+  }
+
+  const textCenterX = pageWidth / 2;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text("PERWAKILAN YAYASAN PEMBINA LEMBAGA PENDIDIKAN PGRI (YPLP PGRI) KABUPATEN CIANJUR", textCenterX, y, { align: 'center' });
+  y += 4;
+  doc.setFontSize(12);
+  doc.text(config.namaSekolah.toUpperCase(), textCenterX, y, { align: 'center' });
+  y += 3.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.text(`${config.alamat} | NPSN: ${config.npsn} | ${config.kontak}`, textCenterX, y, { align: 'center' });
+  y += 3.5;
+
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, pageWidth - margin, y);
+  doc.setLineWidth(0.3);
+  doc.line(margin, y + 0.6, pageWidth - margin, y + 0.6);
+  y += 5.5;
+
+  // Title
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text("MATRIKS REKAPITULASI PRESENSI KBM TATAP MUKA SISWA", textCenterX, y, { align: 'center' });
+  y += 4;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(`Kelas: ${className}   |   Mata Pelajaran: ${mapel}   |   Guru Pengajar: ${teacher.nama}`, textCenterX, y, { align: 'center' });
+  y += 5.5;
+
+  // Determine meetings (max 16 meetings on 1 page grid)
+  const meetingNumbers = Array.from(new Set(journals.map((j) => j.pertemuanKe)))
+    .sort((a, b) => a - b)
+    .slice(0, 16);
+
+  if (meetingNumbers.length === 0) {
+    for (let i = 1; i <= 10; i++) meetingNumbers.push(i);
+  }
+
+  const sortedStudents = [...students]
+    .filter((s) => s.kelas === className)
+    .sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+
+  // Build columns
+  const baseCols = [
+    { title: "No", width: 8, align: 'center' as const },
+    { title: "NISN", width: 24, align: 'center' as const },
+    { title: "Nama Lengkap Siswa", width: 56, align: 'left' as const },
+    { title: "L/P", width: 9, align: 'center' as const },
+  ];
+
+  const meetingColWidth = Math.min(9, Math.floor(130 / meetingNumbers.length));
+  const meetingCols = meetingNumbers.map((p) => ({
+    title: `P${p}`,
+    width: meetingColWidth,
+    align: 'center' as const,
+  }));
+
+  const statCols = [
+    { title: "H", width: 8, align: 'center' as const },
+    { title: "S", width: 8, align: 'center' as const },
+    { title: "I", width: 8, align: 'center' as const },
+    { title: "A", width: 8, align: 'center' as const },
+    { title: "%", width: 12, align: 'center' as const },
+  ];
+
+  const allCols = [...baseCols, ...meetingCols, ...statCols];
+  const totalTableWidth = allCols.reduce((sum, c) => sum + c.width, 0);
+
+  const tableStartX = margin + (pageWidth - margin * 2 - totalTableWidth) / 2;
+  let currentX = tableStartX;
+
+  // Header
+  doc.setFillColor(241, 245, 249);
+  doc.rect(tableStartX, y, totalTableWidth, 6.5, 'F');
+  doc.setDrawColor(50, 50, 50);
+  doc.setLineWidth(0.2);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+
+  allCols.forEach((col) => {
+    doc.rect(currentX, y, col.width, 6.5);
+    const textX = col.align === 'center' ? currentX + col.width / 2 : currentX + 1.5;
+    doc.text(col.title, textX, y + 4.2, { align: col.align });
+    currentX += col.width;
+  });
+  y += 6.5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+
+  sortedStudents.forEach((siswa, index) => {
+    if (y > 175) {
+      doc.addPage();
+      y = 15;
+    }
+
+    currentX = tableStartX;
+    const rowHeight = 5.2;
+
+    let hCount = 0;
+    let sCount = 0;
+    let iCount = 0;
+    let aCount = 0;
+
+    const pStatuses = meetingNumbers.map((p) => {
+      const rec = attendance.find(
+        (a) =>
+          a.nisn === siswa.nisn &&
+          a.kategori === 'KELAS' &&
+          (!a.mapel || a.mapel.trim().toLowerCase() === mapel.trim().toLowerCase()) &&
+          a.pertemuanKe === p
+      );
+
+      if (!rec) {
+        aCount++;
+        return 'A';
+      }
+      const st = rec.status.toLowerCase();
+      if (st.includes('hadir') || st.includes('tepat')) {
+        hCount++;
+        return 'H';
+      }
+      if (st.includes('terlambat')) {
+        hCount++;
+        return 'T';
+      }
+      if (st.includes('sakit')) {
+        sCount++;
+        return 'S';
+      }
+      if (st.includes('izin')) {
+        iCount++;
+        return 'I';
+      }
+      aCount++;
+      return 'A';
+    });
+
+    const totalP = meetingNumbers.length;
+    const persen = totalP > 0 ? Math.round((hCount / totalP) * 100) : 0;
+
+    const rowData = [
+      String(index + 1),
+      siswa.nisn,
+      siswa.nama.length > 28 ? siswa.nama.substring(0, 26) + '...' : siswa.nama,
+      siswa.jk,
+      ...pStatuses,
+      String(hCount),
+      String(sCount),
+      String(iCount),
+      String(aCount),
+      `${persen}%`,
+    ];
+
+    if (index % 2 === 1) {
+      doc.setFillColor(250, 250, 250);
+      doc.rect(tableStartX, y, totalTableWidth, rowHeight, 'F');
+    }
+
+    allCols.forEach((col, cIdx) => {
+      doc.rect(currentX, y, col.width, rowHeight);
+      const textX = col.align === 'center' ? currentX + col.width / 2 : currentX + 1.5;
+      doc.text(rowData[cIdx], textX, y + 3.6, { align: col.align });
+      currentX += col.width;
+    });
+
+    y += rowHeight;
+  });
+
+  // Signatures
+  if (y > 165) {
+    doc.addPage();
+    y = 15;
+  } else {
+    y += 7;
+  }
+
+  const leftSignX = margin + 40;
+  const rightSignX = pageWidth - margin - 50;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+
+  doc.text("Mengetahui,", leftSignX, y, { align: 'center' });
+  doc.text("Kepala Sekolah,", leftSignX, y + 3.5, { align: 'center' });
+
+  const kotaDate = `${config.kota || 'Cianjur'}, ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  doc.text(kotaDate, rightSignX, y, { align: 'center' });
+  doc.text("Guru Mata Pelajaran,", rightSignX, y + 3.5, { align: 'center' });
+
+  y += 18;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(teacher.nama, rightSignX, y, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
+
+  const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
+  const safeMapel = mapel.replace(/[^a-zA-Z0-9]/g, '_');
+  doc.save(`Matriks_Presensi_${className}_${safeMapel}_${cleanSchool}.pdf`);
 }

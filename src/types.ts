@@ -98,6 +98,30 @@ export interface TeacherUser {
   createdAt: string;
 }
 
+export interface TeachingJournal {
+  id: string;
+  guruId: string;
+  guruNama: string;
+  guruNip?: string;
+  kelas: string;
+  mapel: string;
+  tanggal: string; // YYYY-MM-DD
+  pertemuanKe: number;
+  jamPelajaran?: string; // e.g. "07:30 - 09:00" atau "Jam Ke 1-2"
+  materiPokok: string;
+  kegiatanPembelajaran?: string; // e.g. "Penjelasan materi, diskusi kelompok, latihan soal"
+  catatanRefleksi?: string; // e.g. "3 siswa butuh bimbingan tambahan, tugas di kumpulkan minggu depan"
+  totalSiswa: number;
+  hadir: number;
+  terlambat: number;
+  izin: number;
+  sakit: number;
+  alpa: number;
+  persentaseKehadiran: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface UserSession {
   role: 'ADMIN' | 'GURU' | null;
   name: string | null;

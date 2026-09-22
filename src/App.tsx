@@ -7,6 +7,7 @@ import {
   ViewType,
   AttendanceSession,
   TeacherUser,
+  TeachingJournal,
 } from './types';
 import {
   db,
@@ -71,6 +72,11 @@ export default function App() {
   const [teachers, setTeachers] = useState<TeacherUser[]>(() => {
     const saved = localStorage.getItem('epresensi_local_teachers');
     return saved ? JSON.parse(saved) : SEED_TEACHERS;
+  });
+
+  const [teachingJournals, setTeachingJournals] = useState<TeachingJournal[]>(() => {
+    const saved = localStorage.getItem('epresensi_local_journals');
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [userSession, setUserSession] = useState<UserSession>(() => {
@@ -231,7 +237,9 @@ export default function App() {
           const item = d.data() as AttendanceRecord;
           item.id = d.id;
           item.nisn = String(item.nisn || '').trim();
-          const dedupeKey = `${item.nisn}_${item.tanggal}_${item.sesi}`;
+          const dedupeKey = item.kategori === 'KELAS'
+            ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
+            : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
           if (!uniqueMap.has(dedupeKey)) {
             uniqueMap.set(dedupeKey, item);
           }
@@ -244,7 +252,24 @@ export default function App() {
       (err) => console.warn('Firestore attendance error:', err)
     );
 
-    // 3. Listen to School Config
+    // 3. Listen to Teaching Journals (jurnal_mengajar)
+    const unsubJournals = onSnapshot(
+      collection(firestore, 'jurnal_mengajar'),
+      (snapshot) => {
+        const list: TeachingJournal[] = [];
+        snapshot.forEach((d) => {
+          const item = d.data() as TeachingJournal;
+          item.id = d.id;
+          list.push(item);
+        });
+        list.sort((a, b) => (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || '')));
+        setTeachingJournals(list);
+        localStorage.setItem('epresensi_local_journals', JSON.stringify(list));
+      },
+      (err) => console.warn('Firestore journals error:', err)
+    );
+
+    // 4. Listen to School Config
     const unsubConfig = onSnapshot(
       doc(firestore, 'pengaturan', 'identitas_sekolah'),
       (d) => {
@@ -275,7 +300,7 @@ export default function App() {
       (err) => console.warn('Firestore config error:', err)
     );
 
-    // 4. Listen to HEB Calendar
+    // 5. Listen to HEB Calendar
     const unsubHeb = onSnapshot(
       doc(firestore, 'kalender_heb', 'active'),
       (d) => {
@@ -288,7 +313,7 @@ export default function App() {
       (err) => console.warn('Firestore HEB error:', err)
     );
 
-    // 5. Listen to Teachers (guru_users)
+    // 6. Listen to Teachers (guru_users)
     const unsubTeachers = onSnapshot(
       collection(firestore, 'guru_users'),
       (snapshot) => {
@@ -314,7 +339,7 @@ export default function App() {
       (err) => console.warn('Firestore teachers error:', err)
     );
 
-    // 6. Auth listener
+    // 7. Auth listener
     let unsubAuth: (() => void) | undefined;
     if (auth) {
       unsubAuth = onAuthStateChanged(auth, (user) => {
@@ -329,6 +354,7 @@ export default function App() {
     return () => {
       unsubStudents();
       unsubAttendance();
+      unsubJournals();
       unsubConfig();
       unsubHeb();
       unsubTeachers();
@@ -548,6 +574,203 @@ export default function App() {
     }
   };
 
+  const handleBatchImportTeachers = async (newTeachers: TeacherUser[]) => {
+    if (!newTeachers || newTeachers.length === 0) {
+      showNotice(
+        'Format Tidak Sesuai',
+        'Tidak ada data guru yang valid untuk diimpor atau format kolom tidak sesuai template.',
+        'warning'
+      );
+      return;
+    }
+
+    // Step 1: Format validation & sanitization
+    const validTeachers: TeacherUser[] = [];
+    const invalidRows: string[] = [];
+
+    newTeachers.forEach((t, idx) => {
+      const namaClean = (t.nama || '').trim();
+      const usernameClean = (t.username || '').trim().toLowerCase().replace(/\s+/g, '');
+
+      if (!namaClean || namaClean.length < 2) {
+        invalidRows.push(`Baris #${idx + 1}: Nama guru kosong atau tidak valid.`);
+        return;
+      }
+
+      if (!usernameClean) {
+        invalidRows.push(`Baris #${idx + 1} (${namaClean}): Username tidak valid.`);
+        return;
+      }
+
+      validTeachers.push({
+        ...t,
+        nama: namaClean,
+        username: usernameClean,
+        nip: (t.nip || '').trim() || '-',
+        password: (t.password || '').trim() || 'guru123',
+        mapel: (t.mapel || '').trim() || 'Semua Mata Pelajaran',
+        status: t.status === 'NONAKTIF' ? 'NONAKTIF' : 'AKTIF',
+      });
+    });
+
+    if (validTeachers.length === 0) {
+      showNotice(
+        'Impor Dibatalkan',
+        `Format kolom atau data guru tidak sesuai:\n${invalidRows.slice(0, 3).join('\n')}`,
+        'warning'
+      );
+      return;
+    }
+
+    // Step 2: Check duplicates within the import batch itself
+    const seenBatchNips = new Set<string>();
+    const seenBatchUsernames = new Set<string>();
+    const internalDuplicates: string[] = [];
+
+    const dedupedBatch: TeacherUser[] = [];
+    validTeachers.forEach((t) => {
+      const hasNip = t.nip && t.nip !== '-';
+      const isDupNip = hasNip && seenBatchNips.has(t.nip);
+      const isDupUser = seenBatchUsernames.has(t.username);
+
+      if (isDupNip || isDupUser) {
+        internalDuplicates.push(
+          `${t.nama} (${isDupNip ? `NIP ${t.nip}` : `Username @${t.username}`} terduplikasi dalam file)`
+        );
+      } else {
+        if (hasNip) seenBatchNips.add(t.nip);
+        seenBatchUsernames.add(t.username);
+        dedupedBatch.push(t);
+      }
+    });
+
+    // Step 3: Check against existing registered teachers in system state
+    const duplicateNipsFound: string[] = [];
+    const duplicateUsernamesFound: string[] = [];
+    let updatedCount = 0;
+    let insertedCount = 0;
+
+    setTeachers((prev) => {
+      const map = new Map<string, TeacherUser>();
+      prev.forEach((t) => map.set(t.id, t));
+
+      dedupedBatch.forEach((nt) => {
+        let existingId: string | null = null;
+        let matchedBy = '';
+
+        for (const [id, t] of map.entries()) {
+          const sameNip =
+            nt.nip &&
+            nt.nip !== '-' &&
+            t.nip &&
+            t.nip !== '-' &&
+            t.nip.trim() === nt.nip.trim();
+          const sameUsername =
+            nt.username &&
+            t.username &&
+            t.username.trim().toLowerCase() === nt.username.trim().toLowerCase();
+
+          if (sameNip) {
+            existingId = id;
+            matchedBy = `NIP: ${nt.nip}`;
+            break;
+          } else if (sameUsername) {
+            existingId = id;
+            matchedBy = `Username: @${nt.username}`;
+            break;
+          }
+        }
+
+        if (existingId) {
+          const existing = map.get(existingId)!;
+          if (matchedBy.startsWith('NIP')) {
+            duplicateNipsFound.push(`${nt.nama} (NIP ${nt.nip} sudah terdaftar -> diperbarui)`);
+          } else {
+            duplicateUsernamesFound.push(`${nt.nama} (Username @${nt.username} sudah terdaftar -> diperbarui)`);
+          }
+
+          map.set(existingId, {
+            ...existing,
+            ...nt,
+            id: existingId,
+            fotoUrl: nt.fotoUrl || existing.fotoUrl,
+          });
+          updatedCount++;
+        } else {
+          map.set(nt.id, nt);
+          insertedCount++;
+        }
+      });
+
+      const updated = Array.from(map.values());
+      updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Step 4: Persist to Firestore
+    const firestore = db;
+    if (firestore) {
+      try {
+        const chunkSize = 400;
+        for (let i = 0; i < dedupedBatch.length; i += chunkSize) {
+          const chunk = dedupedBatch.slice(i, i + chunkSize);
+          const batch = writeBatch(firestore);
+          chunk.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), t));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Firestore batch import teachers error:', err);
+      }
+    }
+
+    // Step 5: Informative notification feedback
+    const totalDuplicates = duplicateNipsFound.length + duplicateUsernamesFound.length + internalDuplicates.length;
+    const hasWarnings = totalDuplicates > 0 || invalidRows.length > 0;
+
+    if (hasWarnings) {
+      const summaryMsg = [
+        `Berhasil memproses ${insertedCount} guru baru dan memperbarui ${updatedCount} akun terdaftar.`,
+        totalDuplicates > 0 ? `⚠️ Ditemukan ${totalDuplicates} data NIP/Username yang terdaftar sebelumnya atau terduplikasi.` : '',
+        invalidRows.length > 0 ? `⚠️ ${invalidRows.length} baris dilewati karena format tidak lengkap.` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      showNotice('Hasil Impor Guru (Validasi Data)', summaryMsg, 'warning');
+    } else {
+      showNotice(
+        'Impor Data Guru Berhasil',
+        `Sebanyak ${insertedCount} data guru baru berhasil diverifikasi dan disimpan ke sistem.`,
+        'success'
+      );
+    }
+  };
+
+  const handleBatchDeleteTeachers = async (ids: string[]) => {
+    setTeachers((prev) => {
+      const idSet = new Set(ids);
+      const updated = prev.filter((t) => !idSet.has(t.id));
+      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        const chunkSize = 400;
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const chunk = ids.slice(i, i + chunkSize);
+          const batch = writeBatch(firestore);
+          chunk.forEach((id) => batch.delete(doc(firestore, 'guru_users', id)));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Firestore batch delete teachers error:', err);
+      }
+    }
+  };
+
   // Record Attendance Action
   const handleRecordAttendance = async (record: AttendanceRecord): Promise<boolean> => {
     // Update local state first for instantaneous feedback
@@ -710,6 +933,72 @@ export default function App() {
         }
       } catch (err) {
         console.warn('Firestore batch delete attendance error:', err);
+      }
+    }
+  };
+
+  // Teaching Journal / Data Pembelajaran Actions
+  const handleSaveTeachingJournal = async (journal: TeachingJournal, attendanceBatch?: AttendanceRecord[]) => {
+    // 1. Update local journal state
+    setTeachingJournals((prev) => {
+      const idx = prev.findIndex((j) => j.id === journal.id);
+      let updated: TeachingJournal[];
+      if (idx >= 0) {
+        updated = [...prev];
+        updated[idx] = journal;
+      } else {
+        updated = [journal, ...prev];
+      }
+      localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Commit journal + batch attendance records to Firestore
+    const firestore = db;
+    if (firestore) {
+      try {
+        const batch = writeBatch(firestore);
+        const journalRef = doc(firestore, 'jurnal_mengajar', journal.id);
+        batch.set(journalRef, journal, { merge: true });
+
+        if (attendanceBatch && attendanceBatch.length > 0) {
+          attendanceBatch.forEach((rec) => {
+            const recRef = doc(firestore, 'presensi', rec.id);
+            batch.set(recRef, rec, { merge: true });
+          });
+        }
+        await batch.commit();
+      } catch (err) {
+        console.warn('Firestore save teaching journal error:', err);
+      }
+    }
+
+    // 3. Update local attendance state if attendanceBatch provided
+    if (attendanceBatch && attendanceBatch.length > 0) {
+      setAttendance((prev) => {
+        const map = new Map<string, AttendanceRecord>();
+        prev.forEach((r) => map.set(r.id, r));
+        attendanceBatch.forEach((r) => map.set(r.id, r));
+        const updated = Array.from(map.values());
+        localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const handleDeleteTeachingJournal = async (journalId: string) => {
+    setTeachingJournals((prev) => {
+      const updated = prev.filter((j) => j.id !== journalId);
+      localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        await deleteDoc(doc(firestore, 'jurnal_mengajar', journalId));
+      } catch (err) {
+        console.warn('Firestore delete teaching journal error:', err);
       }
     }
   };
@@ -898,6 +1187,7 @@ export default function App() {
                 }
                 students={students}
                 attendance={attendance}
+                journals={teachingJournals}
                 config={config}
                 activeSession={computedSession}
                 timeString={timeFormatted}
@@ -905,6 +1195,8 @@ export default function App() {
                 dayKey={currentDayKey}
                 onRecordAttendance={handleRecordAttendance}
                 onDeleteAttendance={handleDeleteAttendance}
+                onSaveJournal={handleSaveTeachingJournal}
+                onDeleteJournal={handleDeleteTeachingJournal}
                 onShowNotice={showNotice}
                 onShowConfirm={showConfirm}
               />
@@ -918,6 +1210,8 @@ export default function App() {
               onAddTeacher={handleAddTeacher}
               onUpdateTeacher={handleUpdateTeacher}
               onDeleteTeacher={handleDeleteTeacher}
+              onBatchImportTeachers={handleBatchImportTeachers}
+              onBatchDeleteTeachers={handleBatchDeleteTeachers}
               onShowNotice={showNotice}
               onShowConfirm={showConfirm}
             />
