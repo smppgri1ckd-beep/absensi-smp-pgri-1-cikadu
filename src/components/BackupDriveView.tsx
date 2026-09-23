@@ -96,6 +96,11 @@ export const BackupDriveView: React.FC<BackupDriveViewProps> = ({
   const [backupStep, setBackupStep] = useState<string>('');
   const [historyList, setHistoryList] = useState<BackupHistoryItem[]>([]);
   const [manualTokenInput, setManualTokenInput] = useState<string>('');
+  const [customClientIdInput, setCustomClientIdInput] = useState<string>(
+    config.googleDriveBackup?.clientId ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('epresensi_custom_client_id') || '' : '') ||
+      '696200452974-2a9nmf0t83ppi38pl7guqaoajmb3gcko.apps.googleusercontent.com'
+  );
   const [showAdvancedToken, setShowAdvancedToken] = useState<boolean>(false);
 
   // Restore file preview state
@@ -205,6 +210,34 @@ export const BackupDriveView: React.FC<BackupDriveViewProps> = ({
     clearDriveToken();
     setIsDriveConnected(false);
     onShowNotice('Sesi Dihentikan', 'Koneksi akun Google Drive telah diputus dari browser ini.', 'info');
+  };
+
+  // Custom Client ID Save
+  const handleSaveClientId = async () => {
+    const val = customClientIdInput.trim();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('epresensi_custom_client_id', val);
+    }
+    const updatedConfig: SchoolConfig = {
+      ...config,
+      googleDriveBackup: {
+        ...(config.googleDriveBackup || {
+          enabled: true,
+          folderId: folderId || DEFAULT_DRIVE_FOLDER_ID,
+          folderUrl,
+          autoDailyBackup: true,
+        }),
+        clientId: val,
+      },
+    };
+    await onUpdateConfig(updatedConfig);
+    clearDriveToken();
+    setIsDriveConnected(false);
+    onShowNotice(
+      'Client ID Disimpan',
+      'Google OAuth Client ID berhasil disimpan. Silakan klik "Hubungkan Akun Google" sekarang.',
+      'success'
+    );
   };
 
   // Manual token apply
@@ -635,7 +668,33 @@ export const BackupDriveView: React.FC<BackupDriveViewProps> = ({
 
               {showAdvancedToken && (
                 <div className="mt-3 p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 text-xs animate-in fade-in">
+                  {/* Custom OAuth Client ID Input */}
                   <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      🔑 Google OAuth Client ID Milik Anda (Opsional)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Contoh: 696200452974-xxxxxx.apps.googleusercontent.com"
+                        value={customClientIdInput}
+                        onChange={(e) => setCustomClientIdInput(e.target.value)}
+                        className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl font-mono text-[11px] text-slate-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveClientId}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-[11px] cursor-pointer"
+                      >
+                        Simpan Client ID
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Masukkan Client ID yang Anda buat di Google Cloud Console pada project sekolah Anda jika ingin menghubungkan langsung.
+                    </p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/80">
                     <label className="block text-[11px] font-bold text-slate-700 mb-1">
                       Tempel OAuth Access Token Google Drive Manual (Opsional)
                     </label>
@@ -657,6 +716,36 @@ export const BackupDriveView: React.FC<BackupDriveViewProps> = ({
                     </div>
                     <p className="text-[10px] text-slate-500 mt-1">
                       Berguna jika Anda menggunakan token OAuth sementara dari Google OAuth Playground / Cloud Console.
+                    </p>
+                  </div>
+
+                  {/* Authorized Origin Helper Box */}
+                  <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
+                    <span className="text-[11px] font-extrabold text-slate-800 block">
+                      🌐 URL Asal JavaScript Aplikasi Ini (Authorized JavaScript Origin):
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        readOnly
+                        value={typeof window !== 'undefined' ? window.location.origin : ''}
+                        className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg font-mono text-[10px] text-slate-700 select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof window !== 'undefined') {
+                            navigator.clipboard.writeText(window.location.origin);
+                            onShowNotice('Tersalin', 'URL Asal JavaScript berhasil disalin!', 'success');
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] shrink-0 cursor-pointer"
+                      >
+                        Salin URL
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                      Tambahkan URL di atas ke daftar <b>Authorized JavaScript origins</b> di Google Cloud Console pada OAuth Client ID project Anda.
                     </p>
                   </div>
                 </div>

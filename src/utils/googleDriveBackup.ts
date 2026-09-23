@@ -361,9 +361,10 @@ export async function requestGoogleDriveAccessToken(
     return new Promise((resolve, reject) => {
       const clientId =
         customClientId ||
+        (typeof localStorage !== 'undefined' ? localStorage.getItem('epresensi_custom_client_id') : null) ||
         (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
         appletConfig.oAuthClientId ||
-        '255650655129-c015k19pdls3dplr2dp1je4vqg3gnv01.apps.googleusercontent.com';
+        '696200452974-2a9nmf0t83ppi38pl7guqaoajmb3gcko.apps.googleusercontent.com';
 
       let tokenReceived = false;
 
@@ -472,8 +473,14 @@ export async function uploadFileToDrive(
   );
 
   if (!res.ok) {
+    if (res.status === 401) {
+      clearDriveToken();
+    }
     const errorData = await res.json().catch(() => ({}));
-    const msg = errorData?.error?.message || `Google Drive API error: ${res.statusText} (${res.status})`;
+    const msg =
+      res.status === 401
+        ? 'Sesi otorisasi Google Drive telah kedaluwarsa atau tidak valid. Silakan klik tombol "Hubungkan Akun Google" untuk memperbarui sesi, atau unduh cadangan langsung via tombol ZIP.'
+        : errorData?.error?.message || `Google Drive API error: ${res.statusText} (${res.status})`;
     throw new Error(msg);
   }
 
