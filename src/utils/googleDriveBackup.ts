@@ -8,6 +8,7 @@ import {
   FullBackupPayload,
   BackupHistoryItem,
 } from '../types';
+import appletConfig from '../../firebase-applet-config.json';
 
 declare global {
   interface Window {
@@ -361,7 +362,8 @@ export async function requestGoogleDriveAccessToken(
       const clientId =
         customClientId ||
         (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
-        '85384934047-client.apps.googleusercontent.com';
+        appletConfig.oAuthClientId ||
+        '255650655129-c015k19pdls3dplr2dp1je4vqg3gnv01.apps.googleusercontent.com';
 
       let tokenReceived = false;
 

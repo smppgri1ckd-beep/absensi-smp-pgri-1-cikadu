@@ -1,5 +1,6 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
+  initializeFirestore,
   getFirestore,
   Firestore,
   collection,
@@ -11,6 +12,7 @@ import {
   onSnapshot,
   writeBatch,
   Unsubscribe,
+  setLogLevel,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -21,14 +23,15 @@ import {
   User,
 } from 'firebase/auth';
 import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from './types';
+import appletConfig from '../firebase-applet-config.json';
 
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "presensi-siswa-digital-a24ca.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "presensi-siswa-digital-a24ca",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "presensi-siswa-digital-a24ca.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "696200452974",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:696200452974:web:c4ca3756e13c7204e43f7f",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || appletConfig.apiKey || "",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || "composed-night-301414.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || "composed-night-301414",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || "composed-night-301414.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || "255650655129",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || appletConfig.appId || "1:255650655129:web:52d67a5083c13077688108",
 };
 
 let app: FirebaseApp | null = null;
@@ -36,13 +39,20 @@ let db: Firestore | null = null;
 let auth: Auth | null = null;
 
 try {
+  setLogLevel('error');
   if (firebaseConfig.apiKey) {
     if (getApps().length === 0) {
       app = initializeApp(firebaseConfig);
     } else {
       app = getApp();
     }
-    db = getFirestore(app);
+    try {
+      db = initializeFirestore(app, {
+        experimentalAutoDetectLongPolling: true,
+      });
+    } catch {
+      db = getFirestore(app);
+    }
     auth = getAuth(app);
   } else {
     console.info('Firebase API key not set in environment. Running in offline/local storage mode.');
