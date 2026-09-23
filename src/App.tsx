@@ -582,19 +582,41 @@ export default function App() {
     const normalizedUser = rawUser.toLowerCase();
     const trimmedPass = pass.trim();
 
+    console.group(`[Auth Debug] handleLogin initiated for: "${rawUser}"`);
+    console.log('[Auth Debug] Normalized user:', normalizedUser);
+    console.log('[Auth Debug] Firebase Auth initialized:', !!auth);
+
     // 1. Firebase Auth for Administrator (if connected)
     if (auth && normalizedUser.includes('@')) {
       try {
+        console.log('[Auth Debug] Attempting signInWithEmailAndPassword with Firebase...');
         const cred = await signInWithEmailAndPassword(auth, rawUser, trimmedPass);
+        console.log('[Auth Debug] Firebase signInWithEmailAndPassword SUCCESS:', {
+          uid: cred.user.uid,
+          email: cred.user.email,
+          displayName: cred.user.displayName,
+          emailVerified: cred.user.emailVerified,
+        });
         const session: UserSession = { role: 'ADMIN', name: cred.user.email || 'Administrator' };
         setUserSession(session);
         localStorage.setItem('epresensi_user_session', JSON.stringify(session));
         setCurrentView('dashboard');
         showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
+        console.groupEnd();
         return true;
-      } catch (authErr) {
+      } catch (authErr: any) {
+        console.warn('[Auth Debug] Firebase signInWithEmailAndPassword ERROR details:', {
+          code: authErr?.code,
+          message: authErr?.message,
+          customData: authErr?.customData,
+          name: authErr?.name,
+          stack: authErr?.stack,
+          fullError: authErr,
+        });
         // Fallback to local accounts
       }
+    } else if (!auth) {
+      console.log('[Auth Debug] Firebase Auth instance is not active. Using local authentication store.');
     }
 
     // 2. Default Administrator Local Credentials
@@ -615,6 +637,8 @@ export default function App() {
       localStorage.setItem('epresensi_user_session', JSON.stringify(session));
       setCurrentView('dashboard');
       showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
+      console.log('[Auth Debug] Administrator logged in successfully via local credentials.');
+      console.groupEnd();
       return true;
     }
 
@@ -625,6 +649,8 @@ export default function App() {
       localStorage.setItem('epresensi_user_session', JSON.stringify(session));
       setCurrentView('dashboard');
       showNotice('Selamat Datang', 'Login Administrator berhasil. Seluruh fitur aktif!', 'success');
+      console.log('[Auth Debug] Administrator logged in successfully via fallback alias.');
+      console.groupEnd();
       return true;
     }
 
@@ -638,6 +664,8 @@ export default function App() {
 
     if (foundTeacher) {
       if (foundTeacher.status === 'NONAKTIF') {
+        console.warn('[Auth Debug] Teacher account is disabled (NONAKTIF).');
+        console.groupEnd();
         showNotice(
           'Akun Dinonaktifkan',
           'Akun guru ini sedang berstatus NONAKTIF. Silakan hubungi Administrator sekolah untuk mengaktifkan kembali akun Anda.',
@@ -659,9 +687,13 @@ export default function App() {
         `Login berhasil sebagai ${foundTeacher.nama} (${foundTeacher.mapel}). Selamat mengajar dan mengelola presensi kelas!`,
         'success'
       );
+      console.log('[Auth Debug] Teacher logged in successfully:', foundTeacher.nama);
+      console.groupEnd();
       return true;
     }
 
+    console.warn('[Auth Debug] Authentication failed: No matching credentials found for user:', rawUser);
+    console.groupEnd();
     return false;
   };
 

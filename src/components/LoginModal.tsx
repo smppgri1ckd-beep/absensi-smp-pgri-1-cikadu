@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldCheck, X, GraduationCap, Eye, EyeOff } from 'lucide-react';
+import { ShieldCheck, X, GraduationCap, Eye, EyeOff, Globe, Copy, Check, Info } from 'lucide-react';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -19,8 +19,21 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showOriginHelp, setShowOriginHelp] = useState(false);
+  const [copiedOrigin, setCopiedOrigin] = useState(false);
 
   if (!isOpen) return null;
+
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+  const handleCopyOrigin = () => {
+    if (typeof window !== 'undefined') {
+      navigator.clipboard.writeText(window.location.origin);
+      setCopiedOrigin(true);
+      onShowNotice('Tersalin', 'URL Asal JavaScript berhasil disalin ke clipboard!', 'success');
+      setTimeout(() => setCopiedOrigin(false), 2000);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +161,53 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             {loading ? 'Memverifikasi...' : 'Masuk Sekarang'}
           </button>
         </form>
+
+        {/* OAuth / Cloud Run Origin Helper Section */}
+        <div className="pt-2 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => setShowOriginHelp(!showOriginHelp)}
+            className="w-full flex items-center justify-between text-[11px] font-semibold text-slate-500 hover:text-blue-700 transition cursor-pointer py-1 px-1.5 rounded-lg hover:bg-slate-50"
+          >
+            <span className="flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5 text-blue-600" />
+              <span>Bantuan Otorisasi OAuth Google</span>
+            </span>
+            <span className="text-[10px] text-slate-400 font-bold">{showOriginHelp ? '▲ Tutup' : '▼ Salin URL'}</span>
+          </button>
+
+          {showOriginHelp && (
+            <div className="mt-2 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 text-xs animate-in fade-in">
+              <div className="flex items-start gap-1.5 text-slate-700">
+                <Info className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-[10px] leading-relaxed text-slate-600">
+                  Untuk mengatasi <b>Error 400: origin_mismatch</b>, daftarkan URL asal (Authorized JavaScript Origins) berikut di <b>Google Cloud Console</b>:
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  readOnly
+                  value={currentOrigin}
+                  className="flex-1 px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg font-mono text-[10px] text-slate-800 select-all"
+                />
+                <button
+                  type="button"
+                  onClick={handleCopyOrigin}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-[10px] shrink-0 flex items-center gap-1 cursor-pointer"
+                >
+                  {copiedOrigin ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedOrigin ? 'Tersalin' : 'Salin'}</span>
+                </button>
+              </div>
+
+              <p className="text-[9px] text-slate-400">
+                Tambahkan URL ini ke menu <i>Credentials ➔ OAuth 2.0 Client IDs ➔ Authorized JavaScript origins</i>.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -38,6 +38,58 @@ let app: FirebaseApp | null = null;
 let db: Firestore | null = null;
 let auth: Auth | null = null;
 
+export interface FirebaseConnectionStatus {
+  initialized: boolean;
+  projectId: string;
+  authDomain: string;
+  hasApiKey: boolean;
+  isFirestoreOnline: boolean;
+  error?: string;
+}
+
+/**
+ * Checks and validates Firebase configuration & Firestore connectivity
+ */
+export async function testFirebaseConnection(): Promise<FirebaseConnectionStatus> {
+  const status: FirebaseConnectionStatus = {
+    initialized: !!app,
+    projectId: firebaseConfig.projectId,
+    authDomain: firebaseConfig.authDomain,
+    hasApiKey: !!firebaseConfig.apiKey,
+    isFirestoreOnline: false,
+  };
+
+  console.group('🔥 [Firebase Connection & Config Validation]');
+  console.log('📌 Project ID:', status.projectId);
+  console.log('📌 Auth Domain:', status.authDomain);
+  console.log('🔑 API Key Status:', status.hasApiKey ? 'Loaded (Valid length)' : 'MISSING / EMPTY');
+  console.log('📦 App Initialized:', status.initialized ? 'YES' : 'NO');
+  console.log('🔒 OAuth Client ID:', appletConfig.oAuthClientId || 'Default configured');
+
+  if (!db) {
+    console.warn('⚠️ Firestore instance is null. Running in offline fallback mode.');
+    console.groupEnd();
+    return status;
+  }
+
+  try {
+    // Perform a lightweight ping to verify security rules and Firestore read
+    const testDocRef = doc(db, 'pengaturan', 'identitas_sekolah');
+    const snap = await getDoc(testDocRef);
+    status.isFirestoreOnline = true;
+    console.log('✅ Firestore Ping Success: Connected and rules are accepting queries! (Doc exists:', snap.exists(), ')');
+  } catch (err: any) {
+    status.error = err?.message || String(err);
+    console.warn('⚠️ Firestore connectivity check notification:', {
+      code: err?.code,
+      message: err?.message,
+    });
+  }
+
+  console.groupEnd();
+  return status;
+}
+
 try {
   setLogLevel('error');
   if (firebaseConfig.apiKey) {
@@ -59,6 +111,13 @@ try {
   }
 } catch (err) {
   console.warn('Firebase initialization error, fallback active:', err);
+}
+
+// Auto-run connection check on startup
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    testFirebaseConnection().catch(() => {});
+  }, 1000);
 }
 
 export { app, db, auth };
