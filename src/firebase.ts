@@ -48,6 +48,29 @@ export interface FirebaseConnectionStatus {
 }
 
 /**
+ * Strips all undefined values and deeply sanitizes objects before Firestore writes.
+ * Firestore will throw errors if any object key has the value `undefined`.
+ */
+export function cleanFirestoreData<T>(obj: T): T {
+  if (obj === null || obj === undefined) {
+    return '' as any;
+  }
+  if (typeof obj !== 'object') {
+    return obj;
+  }
+  if (Array.isArray(obj)) {
+    return obj.map((item) => cleanFirestoreData(item)) as any;
+  }
+  const cleaned: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj as Record<string, any>)) {
+    if (val !== undefined) {
+      cleaned[key] = cleanFirestoreData(val);
+    }
+  }
+  return cleaned as any;
+}
+
+/**
  * Checks and validates Firebase configuration & Firestore connectivity
  */
 export async function testFirebaseConnection(): Promise<FirebaseConnectionStatus> {

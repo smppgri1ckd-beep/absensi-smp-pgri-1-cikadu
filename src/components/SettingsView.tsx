@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import {
   School,
@@ -84,7 +84,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [maintenanceYear, setMaintenanceYear] = useState<number>(new Date().getFullYear());
   const [maintenanceSem, setMaintenanceSem] = useState<'ganjil' | 'genap'>('ganjil');
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccessBanner, setSaveSuccessBanner] = useState(false);
   const adminPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Synchronize internal state if config prop updates
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...config,
+      schedule: {
+        restrictOutOfHours: true,
+        outOfHoursMessage: 'Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.',
+        ...(config.schedule || {}),
+      },
+    }));
+  }, [config]);
 
   // Safety Purge Modal State
   const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
@@ -134,14 +147,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }));
   };
 
-  const handleSaveAll = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveAll = async (e?: React.FormEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setIsSaving(true);
     try {
       await onUpdateConfig(formData);
-      onShowNotice('Tersimpan', 'Pengaturan jadwal presensi dan profil sekolah berhasil diperbarui!', 'success');
+      playBeep('success');
+      setSaveSuccessBanner(true);
+      onShowNotice(
+        'Pengaturan Berhasil Disimpan',
+        'Semua konfigurasi jadwal presensi, jam operasional, profil sekolah, dan profil admin telah berhasil disimpan dan disinkronkan ke database!',
+        'success'
+      );
+      setTimeout(() => {
+        setSaveSuccessBanner(false);
+      }, 5000);
     } catch (err: any) {
-      onShowNotice('Gagal', err.message, 'warning');
+      playBeep('error');
+      onShowNotice('Gagal Menyimpan', err.message || 'Terjadi kesalahan saat menyimpan pengaturan.', 'warning');
     } finally {
       setIsSaving(false);
     }
@@ -372,11 +398,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   return (
-    <form onSubmit={handleSaveAll} className="space-y-5 max-w-7xl mx-auto">
+    <form noValidate onSubmit={handleSaveAll} className="space-y-5 max-w-7xl mx-auto pb-24">
+      {/* Top Header Card */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h3 className="text-base font-extrabold text-slate-900">
-            Pengaturan Sistem &amp; Jadwal Presensi
+          <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+            <School className="w-5 h-5 text-blue-600" />
+            <span>Pengaturan Sistem &amp; Jadwal Presensi</span>
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Konfigurasi jam masuk &amp; pulang, notifikasi alih sesi otomatis, profil sekolah, dan perawatan database.
@@ -384,14 +412,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         <button
-          type="submit"
+          type="button"
+          onClick={() => handleSaveAll()}
           disabled={isSaving}
-          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-extrabold transition flex items-center gap-2 shadow-xs cursor-pointer active:scale-95 shrink-0"
         >
-          <Save className="w-4 h-4" />
-          <span>{isSaving ? 'Menyimpan...' : 'Simpan Semua Pengaturan'}</span>
+          {isSaving ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Menyimpan Pengaturan...</span>
+            </>
+          ) : (
+            <>
+              <Save className="w-4 h-4" />
+              <span>Simpan Semua Pengaturan</span>
+            </>
+          )}
         </button>
       </div>
+
+      {/* In-Page Success Alert Banner */}
+      {saveSuccessBanner && (
+        <div className="p-4 bg-emerald-50 border-2 border-emerald-400 rounded-2xl flex items-center justify-between gap-3 text-emerald-900 shadow-md animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="font-black text-sm text-emerald-950">Pengaturan &amp; Jadwal Berhasil Disimpan!</p>
+              <p className="text-xs text-emerald-800 mt-0.5">
+                Jam masuk (<strong>{formData.schedule.morningStart} - {formData.schedule.morningCutoff}</strong>), jam pulang (<strong>{formData.schedule.afternoonStart} - {formData.schedule.afternoonCutoff}</strong>), identitas sekolah, dan profil admin telah aktif di seluruh perangkat.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-emerald-600 text-white rounded-xl text-xs font-black shadow-xs shrink-0">
+            Tersimpan
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* LEFT COLUMN: ATTENDANCE SCHEDULE SETTINGS (NEW FEATURE) & WELCOME SCREEN */}
@@ -403,15 +461,27 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <Clock className="w-4 h-4 text-blue-600" />
                 Pengaturan Waktu Absensi &amp; Notifikasi Otomatis
               </h4>
-              <button
-                type="button"
-                onClick={testSwitchChime}
-                className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[11px] font-bold flex items-center gap-1 transition"
-                title="Uji Suara Notifikasi"
-              >
-                <Volume2 className="w-3.5 h-3.5" />
-                <span>Tes Suara Alih Sesi</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={testSwitchChime}
+                  className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+                  title="Uji Suara Notifikasi"
+                >
+                  <Volume2 className="w-3.5 h-3.5" />
+                  <span>Tes Suara</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveAll()}
+                  disabled={isSaving}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+                  title="Simpan khusus bagian jadwal"
+                >
+                  <Save className="w-3 h-3" />
+                  <span>Simpan Jadwal</span>
+                </button>
+              </div>
             </div>
 
             {/* Sesi Pagi */}
@@ -712,10 +782,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* 2. WELCOME HERO SCREEN CUSTOMIZER */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
-            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Monitor className="w-4 h-4 text-indigo-600" />
-              Kustomisasi Layar Sambutan (Welcome Hero)
-            </h4>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Monitor className="w-4 h-4 text-indigo-600" />
+                Kustomisasi Layar Sambutan (Welcome Hero)
+              </h4>
+              <button
+                type="button"
+                onClick={() => handleSaveAll()}
+                disabled={isSaving}
+                className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+              >
+                <Save className="w-3 h-3" />
+                <span>Simpan</span>
+              </button>
+            </div>
 
             <label className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer">
               <span className="font-bold text-slate-800">
@@ -774,10 +855,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="space-y-5">
           {/* 3. SCHOOL IDENTITY & HEADMASTER */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5 text-xs">
-            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <School className="w-4 h-4 text-blue-600" />
-              Identitas Sekolah &amp; Kepala Sekolah
-            </h4>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <School className="w-4 h-4 text-blue-600" />
+                Identitas Sekolah &amp; Kepala Sekolah
+              </h4>
+              <button
+                type="button"
+                onClick={() => handleSaveAll()}
+                disabled={isSaving}
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+              >
+                <Save className="w-3 h-3" />
+                <span>Simpan Profil</span>
+              </button>
+            </div>
 
             <div>
               <label className="block text-slate-600 font-bold mb-1">
@@ -903,10 +995,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* 3.5. PROFIL & FOTO ADMINISTRATOR */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5 text-xs">
-            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <ShieldCheck className="w-4 h-4 text-blue-600" />
-              Profil &amp; Foto Administrator (Admin Avatar)
-            </h4>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-600" />
+                Profil &amp; Foto Administrator (Admin Avatar)
+              </h4>
+              <button
+                type="button"
+                onClick={() => handleSaveAll()}
+                disabled={isSaving}
+                className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+              >
+                <Save className="w-3 h-3" />
+                <span>Simpan Admin</span>
+              </button>
+            </div>
 
             {/* Photo Uploader */}
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3.5">
@@ -1058,10 +1161,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* 4. DUTY TEACHER ROTATION SCHEDULE */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
-            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <CalendarDays className="w-4 h-4 text-emerald-600" />
-              Rotasi Jadwal Petugas Guru Piket
-            </h4>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <CalendarDays className="w-4 h-4 text-emerald-600" />
+                Rotasi Jadwal Petugas Guru Piket
+              </h4>
+              <button
+                type="button"
+                onClick={() => handleSaveAll()}
+                disabled={isSaving}
+                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold flex items-center gap-1 transition cursor-pointer shadow-2xs"
+              >
+                <Save className="w-3 h-3" />
+                <span>Simpan Piket</span>
+              </button>
+            </div>
 
             {(['senin', 'selasa', 'rabu', 'kamis', 'jumat'] as const).map((day) => (
               <div key={day} className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
@@ -1269,6 +1383,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </p>
           </div>
         </div>
+      </div>
+
+      {/* STICKY FLOATING BOTTOM ACTION BAR */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-slate-900/95 backdrop-blur-md text-white px-5 py-3 rounded-2xl shadow-2xl border border-slate-700 flex items-center justify-between gap-4 w-[92%] max-w-xl animate-in slide-in-from-bottom duration-200">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 border border-blue-400/30">
+            <Save className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-extrabold text-xs text-white truncate">Simpan Semua Pengaturan</p>
+            <p className="text-[10px] text-slate-300 truncate">
+              Masuk: {formData.schedule.morningStart}-{formData.schedule.morningCutoff} | Pulang: {formData.schedule.afternoonStart}-{formData.schedule.afternoonCutoff} WIB
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => handleSaveAll()}
+          disabled={isSaving}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition active:scale-95 shrink-0"
+        >
+          {isSaving ? (
+            <>
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Menyimpan...</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+              <span>Simpan Sekarang</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* SAFETY PURGE CONFIRMATION MODAL */}

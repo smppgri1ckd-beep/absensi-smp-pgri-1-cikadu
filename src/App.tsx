@@ -24,6 +24,7 @@ import {
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
+  cleanFirestoreData,
   DEFAULT_SCHOOL_CONFIG,
   SEED_STUDENTS,
   SEED_TEACHERS,
@@ -225,33 +226,24 @@ export default function App() {
     const firestore = db;
     if (!firestore) return;
 
-    // 1. Listen to Students
+    // 1. Listen to Students (siswa)
     const unsubStudents = onSnapshot(
       collection(firestore, 'siswa'),
       (snapshot) => {
-        if (!snapshot.empty) {
-          const list: Student[] = [];
-          snapshot.forEach((d) => {
-            const data = d.data() as Student;
-            data.nisn = String(data.nisn || d.id).trim();
-            list.push(data);
-          });
-          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-          setStudents(list);
-          localStorage.setItem('epresensi_local_students', JSON.stringify(list));
-        } else if (students.length === 0) {
-          // Initialize starter students into cloud
-          const batch = writeBatch(firestore);
-          SEED_STUDENTS.forEach((s) => {
-            batch.set(doc(firestore, 'siswa', s.nisn), s);
-          });
-          batch.commit().catch(() => {});
-        }
+        const list: Student[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as Student;
+          data.nisn = String(data.nisn || d.id).trim();
+          list.push(data);
+        });
+        list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+        setStudents(list);
+        localStorage.setItem('epresensi_local_students', JSON.stringify(list));
       },
       (err) => console.warn('Firestore students error:', err)
     );
 
-    // 2. Listen to Attendance
+    // 2. Listen to Attendance (presensi)
     const unsubAttendance = onSnapshot(
       collection(firestore, 'presensi'),
       (snapshot) => {
@@ -317,7 +309,7 @@ export default function App() {
           setConfig(merged);
           localStorage.setItem('epresensi_local_config', JSON.stringify(merged));
         } else {
-          setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), DEFAULT_SCHOOL_CONFIG).catch(() => {});
+          setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleanFirestoreData(DEFAULT_SCHOOL_CONFIG)).catch(() => {});
         }
       },
       (err) => console.warn('Firestore config error:', err)
@@ -340,24 +332,15 @@ export default function App() {
     const unsubTeachers = onSnapshot(
       collection(firestore, 'guru_users'),
       (snapshot) => {
-        if (!snapshot.empty) {
-          const list: TeacherUser[] = [];
-          snapshot.forEach((d) => {
-            const data = d.data() as TeacherUser;
-            data.id = d.id;
-            list.push(data);
-          });
-          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-          setTeachers(list);
-          localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
-        } else {
-          // Initialize starter teacher accounts into cloud
-          const batch = writeBatch(firestore);
-          SEED_TEACHERS.forEach((t) => {
-            batch.set(doc(firestore, 'guru_users', t.id), t);
-          });
-          batch.commit().catch(() => {});
-        }
+        const list: TeacherUser[] = [];
+        snapshot.forEach((d) => {
+          const data = d.data() as TeacherUser;
+          data.id = d.id;
+          list.push(data);
+        });
+        list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+        setTeachers(list);
+        localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
       },
       (err) => console.warn('Firestore teachers error:', err)
     );
@@ -400,55 +383,49 @@ export default function App() {
       try {
         // 1. Fetch Students
         const studentSnap = await getDocs(collection(firestore, 'siswa'));
-        if (!studentSnap.empty) {
-          const list: Student[] = [];
-          studentSnap.forEach((d) => {
-            const data = d.data() as Student;
-            data.nisn = String(data.nisn || d.id).trim();
-            list.push(data);
-          });
-          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-          setStudents(list);
-          localStorage.setItem('epresensi_local_students', JSON.stringify(list));
-        }
+        const listStudents: Student[] = [];
+        studentSnap.forEach((d) => {
+          const data = d.data() as Student;
+          data.nisn = String(data.nisn || d.id).trim();
+          listStudents.push(data);
+        });
+        listStudents.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+        setStudents(listStudents);
+        localStorage.setItem('epresensi_local_students', JSON.stringify(listStudents));
 
         // 2. Fetch Attendance
         const attSnap = await getDocs(collection(firestore, 'presensi'));
-        if (!attSnap.empty) {
-          const uniqueMap = new Map<string, AttendanceRecord>();
-          attSnap.forEach((d) => {
-            const item = d.data() as AttendanceRecord;
-            item.id = d.id;
-            item.nisn = String(item.nisn || '').trim();
-            const dedupeKey =
-              item.kategori === 'KELAS'
-                ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
-                : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
-            if (!uniqueMap.has(dedupeKey)) {
-              uniqueMap.set(dedupeKey, item);
-            }
-          });
-          const list = Array.from(uniqueMap.values());
-          list.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
-          setAttendance(list);
-          localStorage.setItem('epresensi_local_attendance', JSON.stringify(list));
-        }
+        const uniqueMap = new Map<string, AttendanceRecord>();
+        attSnap.forEach((d) => {
+          const item = d.data() as AttendanceRecord;
+          item.id = d.id;
+          item.nisn = String(item.nisn || '').trim();
+          const dedupeKey =
+            item.kategori === 'KELAS'
+              ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
+              : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
+          if (!uniqueMap.has(dedupeKey)) {
+            uniqueMap.set(dedupeKey, item);
+          }
+        });
+        const listAtt = Array.from(uniqueMap.values());
+        listAtt.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
+        setAttendance(listAtt);
+        localStorage.setItem('epresensi_local_attendance', JSON.stringify(listAtt));
 
         // 3. Fetch Teaching Journals
         const journalSnap = await getDocs(collection(firestore, 'jurnal_mengajar'));
-        if (!journalSnap.empty) {
-          const list: TeachingJournal[] = [];
-          journalSnap.forEach((d) => {
-            const item = d.data() as TeachingJournal;
-            item.id = d.id;
-            list.push(item);
-          });
-          list.sort((a, b) =>
-            (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || ''))
-          );
-          setTeachingJournals(list);
-          localStorage.setItem('epresensi_local_journals', JSON.stringify(list));
-        }
+        const listJournals: TeachingJournal[] = [];
+        journalSnap.forEach((d) => {
+          const item = d.data() as TeachingJournal;
+          item.id = d.id;
+          listJournals.push(item);
+        });
+        listJournals.sort((a, b) =>
+          (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || ''))
+        );
+        setTeachingJournals(listJournals);
+        localStorage.setItem('epresensi_local_journals', JSON.stringify(listJournals));
 
         // 4. Fetch School Config
         const configSnap = await getDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'));
@@ -476,17 +453,15 @@ export default function App() {
 
         // 5. Fetch Teachers
         const teacherSnap = await getDocs(collection(firestore, 'guru_users'));
-        if (!teacherSnap.empty) {
-          const list: TeacherUser[] = [];
-          teacherSnap.forEach((d) => {
-            const data = d.data() as TeacherUser;
-            data.id = d.id;
-            list.push(data);
-          });
-          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-          setTeachers(list);
-          localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
-        }
+        const listTeachers: TeacherUser[] = [];
+        teacherSnap.forEach((d) => {
+          const data = d.data() as TeacherUser;
+          data.id = d.id;
+          listTeachers.push(data);
+        });
+        listTeachers.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+        setTeachers(listTeachers);
+        localStorage.setItem('epresensi_local_teachers', JSON.stringify(listTeachers));
 
         // 6. Fetch HEB Calendar
         const hebSnap = await getDoc(doc(firestore, 'kalender_heb', 'active'));
@@ -705,8 +680,9 @@ export default function App() {
 
   // Teacher Management Actions (Admin)
   const handleAddTeacher = async (teacher: TeacherUser) => {
+    const cleaned = cleanFirestoreData(teacher);
     setTeachers((prev) => {
-      const updated = [...prev, teacher];
+      const updated = [...prev, cleaned];
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
       localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
       return updated;
@@ -715,7 +691,7 @@ export default function App() {
     const firestore = db;
     if (firestore) {
       try {
-        await setDoc(doc(firestore, 'guru_users', teacher.id), teacher);
+        await setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned);
       } catch (err) {
         console.warn('Firestore add teacher error:', err);
       }
@@ -723,19 +699,20 @@ export default function App() {
   };
 
   const handleUpdateTeacher = async (teacher: TeacherUser) => {
+    const cleaned = cleanFirestoreData(teacher);
     setTeachers((prev) => {
-      const updated = prev.map((t) => (t.id === teacher.id ? teacher : t));
+      const updated = prev.map((t) => (t.id === cleaned.id ? cleaned : t));
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
       localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
       return updated;
     });
 
     // If currently logged in teacher is modified, update session
-    if (userSession.teacherData?.id === teacher.id) {
+    if (userSession.teacherData?.id === cleaned.id) {
       const updatedSession: UserSession = {
         ...userSession,
-        name: teacher.nama,
-        teacherData: teacher,
+        name: cleaned.nama,
+        teacherData: cleaned,
       };
       setUserSession(updatedSession);
       localStorage.setItem('epresensi_user_session', JSON.stringify(updatedSession));
@@ -744,7 +721,7 @@ export default function App() {
     const firestore = db;
     if (firestore) {
       try {
-        await setDoc(doc(firestore, 'guru_users', teacher.id), teacher);
+        await setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned);
       } catch (err) {
         console.warn('Firestore update teacher error:', err);
       }
@@ -820,7 +797,7 @@ export default function App() {
         return;
       }
 
-      validTeachers.push({
+      validTeachers.push(cleanFirestoreData({
         ...t,
         nama: namaClean,
         username: usernameClean,
@@ -828,7 +805,11 @@ export default function App() {
         password: (t.password || '').trim() || 'guru123',
         mapel: (t.mapel || '').trim() || 'Semua Mata Pelajaran',
         status: t.status === 'NONAKTIF' ? 'NONAKTIF' : 'AKTIF',
-      });
+        waliKelas: t.waliKelas || '',
+        kontak: t.kontak || '',
+        noHp: t.noHp || '',
+        fotoUrl: t.fotoUrl || '',
+      }));
     });
 
     if (validTeachers.length === 0) {
@@ -907,12 +888,12 @@ export default function App() {
             duplicateUsernamesFound.push(`${nt.nama} (Username @${nt.username} sudah terdaftar -> diperbarui)`);
           }
 
-          map.set(existingId, {
+          map.set(existingId, cleanFirestoreData({
             ...existing,
             ...nt,
             id: existingId,
             fotoUrl: nt.fotoUrl || existing.fotoUrl,
-          });
+          }));
           updatedCount++;
         } else {
           map.set(nt.id, nt);
@@ -934,7 +915,7 @@ export default function App() {
         for (let i = 0; i < dedupedBatch.length; i += chunkSize) {
           const chunk = dedupedBatch.slice(i, i + chunkSize);
           const batch = writeBatch(firestore);
-          chunk.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), t));
+          chunk.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
           await batch.commit();
         }
       } catch (err) {
@@ -991,16 +972,17 @@ export default function App() {
 
   // Record Attendance Action
   const handleRecordAttendance = async (record: AttendanceRecord): Promise<boolean> => {
+    const cleaned = cleanFirestoreData(record);
     // Update local state first for instantaneous feedback
     setAttendance((prev) => {
-      const filtered = prev.filter((a) => a.id !== record.id);
-      return [record, ...filtered];
+      const filtered = prev.filter((a) => a.id !== cleaned.id);
+      return [cleaned, ...filtered];
     });
 
     const firestore = db;
     if (firestore) {
       try {
-        await setDoc(doc(firestore, 'presensi', record.id), record);
+        await setDoc(doc(firestore, 'presensi', cleaned.id), cleaned);
       } catch (err) {
         console.warn('Failed to sync attendance to Firestore:', err);
       }
@@ -1010,9 +992,10 @@ export default function App() {
 
   // Student CRUD Actions
   const handleAddOrUpdateStudent = async (student: Student, oldNisn?: string) => {
+    const cleaned = cleanFirestoreData(student);
     setStudents((prev) => {
-      const filtered = prev.filter((s) => s.nisn !== (oldNisn || student.nisn));
-      const updated = [...filtered, student];
+      const filtered = prev.filter((s) => s.nisn !== (oldNisn || cleaned.nisn));
+      const updated = [...filtered, cleaned];
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
       localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
       return updated;
@@ -1021,10 +1004,10 @@ export default function App() {
     const firestore = db;
     if (firestore) {
       try {
-        if (oldNisn && oldNisn !== student.nisn) {
+        if (oldNisn && oldNisn !== cleaned.nisn) {
           await deleteDoc(doc(firestore, 'siswa', oldNisn));
         }
-        await setDoc(doc(firestore, 'siswa', student.nisn), student);
+        await setDoc(doc(firestore, 'siswa', cleaned.nisn), cleaned);
       } catch (err) {
         console.warn('Firestore student sync error:', err);
       }
@@ -1071,10 +1054,11 @@ export default function App() {
   };
 
   const handleBatchImportStudents = async (newStudents: Student[]) => {
+    const cleanedList = newStudents.map((s) => cleanFirestoreData(s));
     setStudents((prev) => {
       const map = new Map<string, Student>();
       prev.forEach((s) => map.set(s.nisn, s));
-      newStudents.forEach((s) => map.set(s.nisn, s));
+      cleanedList.forEach((s) => map.set(s.nisn, s));
       const updated = Array.from(map.values());
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
       localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
@@ -1085,8 +1069,8 @@ export default function App() {
     if (firestore) {
       try {
         const chunkSize = 200;
-        for (let i = 0; i < newStudents.length; i += chunkSize) {
-          const chunk = newStudents.slice(i, i + chunkSize);
+        for (let i = 0; i < cleanedList.length; i += chunkSize) {
+          const chunk = cleanedList.slice(i, i + chunkSize);
           const batch = writeBatch(firestore);
           chunk.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), s));
           await batch.commit();
@@ -1099,9 +1083,10 @@ export default function App() {
 
   // Attendance CRUD Actions
   const handleAddOrUpdateAttendance = async (record: AttendanceRecord) => {
+    const cleaned = cleanFirestoreData(record);
     setAttendance((prev) => {
-      const filtered = prev.filter((a) => a.id !== record.id);
-      const updated = [record, ...filtered];
+      const filtered = prev.filter((a) => a.id !== cleaned.id);
+      const updated = [cleaned, ...filtered];
       localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
       return updated;
     });
@@ -1109,7 +1094,7 @@ export default function App() {
     const firestore = db;
     if (firestore) {
       try {
-        await setDoc(doc(firestore, 'presensi', record.id), record);
+        await setDoc(doc(firestore, 'presensi', cleaned.id), cleaned);
       } catch (err) {
         console.warn('Firestore attendance sync error:', err);
       }
@@ -1157,15 +1142,18 @@ export default function App() {
 
   // Teaching Journal / Data Pembelajaran Actions
   const handleSaveTeachingJournal = async (journal: TeachingJournal, attendanceBatch?: AttendanceRecord[]) => {
+    const cleanedJournal = cleanFirestoreData(journal);
+    const cleanedBatch = attendanceBatch ? attendanceBatch.map((r) => cleanFirestoreData(r)) : [];
+
     // 1. Update local journal state
     setTeachingJournals((prev) => {
-      const idx = prev.findIndex((j) => j.id === journal.id);
+      const idx = prev.findIndex((j) => j.id === cleanedJournal.id);
       let updated: TeachingJournal[];
       if (idx >= 0) {
         updated = [...prev];
-        updated[idx] = journal;
+        updated[idx] = cleanedJournal;
       } else {
-        updated = [journal, ...prev];
+        updated = [cleanedJournal, ...prev];
       }
       localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
       return updated;
@@ -1176,11 +1164,11 @@ export default function App() {
     if (firestore) {
       try {
         const batch = writeBatch(firestore);
-        const journalRef = doc(firestore, 'jurnal_mengajar', journal.id);
-        batch.set(journalRef, journal, { merge: true });
+        const journalRef = doc(firestore, 'jurnal_mengajar', cleanedJournal.id);
+        batch.set(journalRef, cleanedJournal, { merge: true });
 
-        if (attendanceBatch && attendanceBatch.length > 0) {
-          attendanceBatch.forEach((rec) => {
+        if (cleanedBatch.length > 0) {
+          cleanedBatch.forEach((rec) => {
             const recRef = doc(firestore, 'presensi', rec.id);
             batch.set(recRef, rec, { merge: true });
           });
@@ -1192,11 +1180,11 @@ export default function App() {
     }
 
     // 3. Update local attendance state if attendanceBatch provided
-    if (attendanceBatch && attendanceBatch.length > 0) {
+    if (cleanedBatch.length > 0) {
       setAttendance((prev) => {
         const map = new Map<string, AttendanceRecord>();
         prev.forEach((r) => map.set(r.id, r));
-        attendanceBatch.forEach((r) => map.set(r.id, r));
+        cleanedBatch.forEach((r) => map.set(r.id, r));
         const updated = Array.from(map.values());
         localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
         return updated;
@@ -1223,12 +1211,13 @@ export default function App() {
 
   // Config and HEB updates
   const handleUpdateConfig = async (newConfig: SchoolConfig) => {
-    setConfig(newConfig);
-    localStorage.setItem('epresensi_local_config', JSON.stringify(newConfig));
+    const cleaned = cleanFirestoreData(newConfig);
+    setConfig(cleaned);
+    localStorage.setItem('epresensi_local_config', JSON.stringify(cleaned));
     const firestore = db;
     if (firestore) {
       try {
-        await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), newConfig);
+        await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned);
       } catch (err) {
         console.warn('Firestore config update error:', err);
       }
@@ -1236,12 +1225,13 @@ export default function App() {
   };
 
   const handleUpdateKalenderHeb = async (data: Record<string, boolean>) => {
-    setKalenderHebData(data);
-    localStorage.setItem('epresensi_local_heb', JSON.stringify(data));
+    const cleaned = cleanFirestoreData(data);
+    setKalenderHebData(cleaned);
+    localStorage.setItem('epresensi_local_heb', JSON.stringify(cleaned));
     const firestore = db;
     if (firestore) {
       try {
-        await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: data });
+        await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned });
       } catch (err) {
         console.warn('Firestore HEB update error:', err);
       }
@@ -1375,12 +1365,12 @@ export default function App() {
   // Restore Complete Backup Archive into Database
   const handleRestoreAllData = async (payload: any) => {
     // 1. Update State
-    if (Array.isArray(payload.students)) setStudents(payload.students);
-    if (Array.isArray(payload.attendance)) setAttendance(payload.attendance);
-    if (Array.isArray(payload.journals)) setTeachingJournals(payload.journals);
-    if (Array.isArray(payload.teachers)) setTeachers(payload.teachers);
-    if (payload.kalenderHeb) setKalenderHebData(payload.kalenderHeb);
-    if (payload.config && payload.config.namaSekolah) setConfig(payload.config);
+    if (Array.isArray(payload.students)) setStudents(payload.students.map((s: any) => cleanFirestoreData(s)));
+    if (Array.isArray(payload.attendance)) setAttendance(payload.attendance.map((a: any) => cleanFirestoreData(a)));
+    if (Array.isArray(payload.journals)) setTeachingJournals(payload.journals.map((j: any) => cleanFirestoreData(j)));
+    if (Array.isArray(payload.teachers)) setTeachers(payload.teachers.map((t: any) => cleanFirestoreData(t)));
+    if (payload.kalenderHeb) setKalenderHebData(cleanFirestoreData(payload.kalenderHeb));
+    if (payload.config && payload.config.namaSekolah) setConfig(cleanFirestoreData(payload.config));
 
     // 2. Persist to LocalStorage
     localStorage.setItem('epresensi_local_students', JSON.stringify(payload.students || []));
@@ -1395,10 +1385,10 @@ export default function App() {
     if (firestore) {
       try {
         if (payload.config) {
-          await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), payload.config, { merge: true });
+          await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleanFirestoreData(payload.config), { merge: true });
         }
         if (payload.kalenderHeb) {
-          await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: payload.kalenderHeb }, { merge: true });
+          await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleanFirestoreData(payload.kalenderHeb) }, { merge: true });
         }
 
         // Write students chunked
@@ -1406,7 +1396,7 @@ export default function App() {
           for (let i = 0; i < payload.students.length; i += 200) {
             const chunk = payload.students.slice(i, i + 200);
             const batch = writeBatch(firestore);
-            chunk.forEach((s: any) => batch.set(doc(firestore, 'siswa', s.nisn), s));
+            chunk.forEach((s: any) => batch.set(doc(firestore, 'siswa', s.nisn), cleanFirestoreData(s)));
             await batch.commit();
           }
         }
@@ -1416,7 +1406,7 @@ export default function App() {
           for (let i = 0; i < payload.attendance.length; i += 200) {
             const chunk = payload.attendance.slice(i, i + 200);
             const batch = writeBatch(firestore);
-            chunk.forEach((a: any) => batch.set(doc(firestore, 'presensi', a.id), a));
+            chunk.forEach((a: any) => batch.set(doc(firestore, 'presensi', a.id), cleanFirestoreData(a)));
             await batch.commit();
           }
         }
@@ -1426,17 +1416,17 @@ export default function App() {
           for (let i = 0; i < payload.journals.length; i += 200) {
             const chunk = payload.journals.slice(i, i + 200);
             const batch = writeBatch(firestore);
-            chunk.forEach((j: any) => batch.set(doc(firestore, 'jurnal_mengajar', j.id), j));
+            chunk.forEach((j: any) => batch.set(doc(firestore, 'jurnal_mengajar', j.id), cleanFirestoreData(j)));
             await batch.commit();
           }
         }
 
-        // Write teachers chunked
+        // Write teachers chunked into guru_users
         if (Array.isArray(payload.teachers)) {
           for (let i = 0; i < payload.teachers.length; i += 200) {
             const chunk = payload.teachers.slice(i, i + 200);
             const batch = writeBatch(firestore);
-            chunk.forEach((t: any) => batch.set(doc(firestore, 'guru', t.id), t));
+            chunk.forEach((t: any) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
             await batch.commit();
           }
         }

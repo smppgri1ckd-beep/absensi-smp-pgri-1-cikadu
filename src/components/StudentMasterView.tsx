@@ -250,13 +250,19 @@ export const StudentMasterView: React.FC<StudentMasterViewProps> = ({
 
   const handleBatchDelete = () => {
     if (selectedNisns.length === 0) return;
+    const toDelete = [...selectedNisns];
+    const count = toDelete.length;
     onShowConfirm(
       'Hapus Siswa Terpilih',
-      `Apakah Anda yakin ingin menghapus permanen ${selectedNisns.length} data siswa dari database?`,
+      `Apakah Anda yakin ingin menghapus permanen ${count} data siswa dari database?`,
       async () => {
-        await onBatchDeleteStudents(selectedNisns);
-        setSelectedNisns([]);
-        onShowNotice('Terhapus', `${selectedNisns.length} data siswa berhasil dihapus.`, 'success');
+        try {
+          await onBatchDeleteStudents(toDelete);
+          setSelectedNisns([]);
+          onShowNotice('Terhapus', `${count} data siswa berhasil dihapus.`, 'success');
+        } catch (err: any) {
+          onShowNotice('Gagal Menghapus', err.message, 'warning');
+        }
       }
     );
   };

@@ -220,17 +220,27 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
       nip: formNip.trim() || '-',
       username: formUsername.trim().toLowerCase(),
       password: formPassword.trim(),
-      mapel: formMapel.trim(),
-      waliKelas: formWaliKelas === 'Bukan Wali Kelas' ? undefined : formWaliKelas,
-      kontak: formKontak.trim() || formNoHp.trim() || undefined,
-      noHp: formNoHp.trim() || formKontak.trim() || undefined,
-      fotoUrl: formFotoUrl.trim() || undefined,
+      mapel: formMapel.trim() || OFFICIAL_SUBJECTS[0] || 'Semua Mata Pelajaran',
+      waliKelas: formWaliKelas === 'Bukan Wali Kelas' ? '' : formWaliKelas,
+      kontak: formKontak.trim() || formNoHp.trim() || '',
+      noHp: formNoHp.trim() || formKontak.trim() || '',
+      fotoUrl: formFotoUrl.trim() || '',
       status: formStatus,
       createdAt: new Date().toISOString(),
     };
 
     try {
       await onAddTeacher(newTeacher);
+      // Reset form
+      setFormNama('');
+      setFormNip('');
+      setFormUsername('');
+      setFormPassword('');
+      setFormMapel(OFFICIAL_SUBJECTS[0] || 'Semua Mata Pelajaran');
+      setFormWaliKelas('Bukan Wali Kelas');
+      setFormKontak('');
+      setFormNoHp('');
+      setFormFotoUrl('');
       setShowAddModal(false);
       onShowNotice(
         'Akun Guru Berhasil Dibuat',
@@ -264,11 +274,11 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
       nip: formNip.trim() || '-',
       username: formUsername.trim().toLowerCase(),
       password: formPassword.trim(),
-      mapel: formMapel.trim(),
-      waliKelas: formWaliKelas === 'Bukan Wali Kelas' ? undefined : formWaliKelas,
-      kontak: formKontak.trim() || formNoHp.trim() || undefined,
-      noHp: formNoHp.trim() || formKontak.trim() || undefined,
-      fotoUrl: formFotoUrl.trim() || undefined,
+      mapel: formMapel.trim() || OFFICIAL_SUBJECTS[0] || 'Semua Mata Pelajaran',
+      waliKelas: formWaliKelas === 'Bukan Wali Kelas' ? '' : formWaliKelas,
+      kontak: formKontak.trim() || formNoHp.trim() || '',
+      noHp: formNoHp.trim() || formKontak.trim() || '',
+      fotoUrl: formFotoUrl.trim() || '',
       status: formStatus,
     };
 
@@ -336,19 +346,20 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
 
   const handleBatchDelete = () => {
     if (selectedTeacherIds.length === 0) return;
+    const toDelete = [...selectedTeacherIds];
+    const count = toDelete.length;
     onShowConfirm(
       'Hapus Massal Akun Guru',
-      `Apakah Anda yakin ingin menghapus permanen ${selectedTeacherIds.length} akun guru yang dicentang? Guru yang dihapus tidak akan dapat login kembali ke sistem.`,
+      `Apakah Anda yakin ingin menghapus permanen ${count} akun guru yang dicentang? Guru yang dihapus tidak akan dapat login kembali ke sistem.`,
       async () => {
         try {
           if (onBatchDeleteTeachers) {
-            await onBatchDeleteTeachers(selectedTeacherIds);
+            await onBatchDeleteTeachers(toDelete);
           } else {
-            for (const id of selectedTeacherIds) {
+            for (const id of toDelete) {
               await onDeleteTeacher(id);
             }
           }
-          const count = selectedTeacherIds.length;
           setSelectedTeacherIds([]);
           onShowNotice('Berhasil Dihapus', `${count} data akun guru berhasil dihapus.`, 'success');
         } catch (err: any) {
