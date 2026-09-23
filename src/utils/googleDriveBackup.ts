@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import * as XLSX from 'xlsx';
 import {
   Student,
   AttendanceRecord,
@@ -188,6 +189,84 @@ export function downloadJsonFile(data: any, fileName: string) {
   downloadBlob(blob, fileName);
 }
 
+/**
+ * Download complete multi-sheet Excel (.xlsx) workbook containing all tables
+ */
+export function downloadFullBackupXlsx(payload: FullBackupPayload, fileName: string) {
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Master Siswa
+  const studentRows = payload.students.map((s, idx) => ({
+    No: idx + 1,
+    NISN: s.nisn,
+    'Nama Lengkap': s.nama,
+    'L/P': s.jk,
+    Kelas: s.kelas,
+    'Foto URL': s.fotoUrl || '',
+  }));
+  const wsStudents = XLSX.utils.json_to_sheet(studentRows);
+  XLSX.utils.book_append_sheet(wb, wsStudents, 'Master Siswa');
+
+  // Sheet 2: Rekap Presensi
+  const attendanceRows = payload.attendance.map((a, idx) => ({
+    No: idx + 1,
+    Tanggal: a.tanggal,
+    Waktu: a.waktu,
+    NISN: a.nisn,
+    'Nama Siswa': a.nama,
+    Kelas: a.kelas,
+    Sesi: a.sesi,
+    Status: a.status,
+    Kategori: a.kategori || 'APEL',
+    'Mata Pelajaran': a.mapel || '-',
+    'Pertemuan Ke': a.pertemuanKe !== undefined ? a.pertemuanKe : '-',
+    'Materi Pokok': a.materiPokok || '-',
+    'Guru Pengajar': a.guruNama || '-',
+  }));
+  const wsAttendance = XLSX.utils.json_to_sheet(attendanceRows);
+  XLSX.utils.book_append_sheet(wb, wsAttendance, 'Rekap Presensi');
+
+  // Sheet 3: Jurnal Mengajar Guru
+  const journalRows = payload.journals.map((j, idx) => ({
+    No: idx + 1,
+    Tanggal: j.tanggal,
+    'Pertemuan Ke': j.pertemuanKe,
+    'Jam Pelajaran': j.jamPelajaran || '-',
+    Kelas: j.kelas,
+    'Mata Pelajaran': j.mapel,
+    'Nama Guru': j.guruNama,
+    NIP: j.guruNip || '-',
+    'Materi Pokok': j.materiPokok,
+    'Kegiatan Pembelajaran': j.kegiatanPembelajaran || '-',
+    'Catatan / Refleksi': j.catatanRefleksi || '-',
+    'Total Siswa': j.totalSiswa,
+    Hadir: j.hadir,
+    Terlambat: j.terlambat,
+    Izin: j.izin,
+    Sakit: j.sakit,
+    Alpa: j.alpa,
+    '% Kehadiran': `${j.persentaseKehadiran}%`,
+  }));
+  const wsJournals = XLSX.utils.json_to_sheet(journalRows);
+  XLSX.utils.book_append_sheet(wb, wsJournals, 'Jurnal Mengajar');
+
+  // Sheet 4: Master Guru
+  const teacherRows = payload.teachers.map((t, idx) => ({
+    No: idx + 1,
+    NIP: t.nip || '-',
+    'Nama Lengkap': t.nama,
+    Username: t.username,
+    'Mata Pelajaran': t.mapel,
+    'Wali Kelas': t.waliKelas || '-',
+    'Kontak / WA': t.kontak || t.noHp || '-',
+    Status: t.status,
+  }));
+  const wsTeachers = XLSX.utils.json_to_sheet(teacherRows);
+  XLSX.utils.book_append_sheet(wb, wsTeachers, 'Master Guru');
+
+  XLSX.writeFile(wb, fileName);
+}
+
 export async function createFullBackupZip(payload: FullBackupPayload): Promise<Blob> {
   const zip = new JSZip();
   const dateStr = new Date().toISOString().split('T')[0];
@@ -218,12 +297,12 @@ RINGKASAN DATA TERCADANG:
 - Total Akun Guru: ${payload.teachers.length} Guru
 
 PETUNJUK PEMULIHAN (RESTORE):
-1. Buka Menu "Backup & Google Drive" atau "Pengaturan" di aplikasi E-Presensi.
-2. Klik tombol "Pulihkan / Restore Data dari File Backup".
-3. Pilih file JSON berformat (*_FULL.json) yang berada di dalam berkas ZIP ini.
-4. Sistem akan memverifikasi dan memulihkan seluruh data ke database Firestore/Lokal.
-`;
-  zip.file('README_INFO_CADANGAN.txt', readme);
+1. Buka aplikasi e-Presensi SMP PGRI 1 Cikadu
+2. Masuk ke Menu "Backup & Restore Data Manual"
+3. Unggah berkas JSON yang ada di dalam arsip ini
+4. Konfirmasi pemulihan data untuk menyinkronkan ke database.
+=====================================================`;
+  zip.file('PETUNJUK_RESTORASI.txt', readme);
 
   return await zip.generateAsync({ type: 'blob' });
 }

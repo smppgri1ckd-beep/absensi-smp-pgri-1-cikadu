@@ -12,9 +12,11 @@ import {
   Users,
   Info,
   RefreshCw,
+  FileText,
+  HelpCircle,
 } from 'lucide-react';
 import { TeacherUser, SchoolConfig } from '../types';
-import { downloadTeacherExcelTemplate } from '../utils/export';
+import { downloadTeacherExcelTemplate, downloadTeacherCsvTemplate } from '../utils/export';
 
 interface TeacherImportModalProps {
   isOpen: boolean;
@@ -48,9 +50,29 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDownloadTemplate = () => {
+  const handleDownloadExcelTemplate = () => {
     downloadTeacherExcelTemplate(config);
-    onShowNotice('Unduh Berhasil', 'Template Excel data guru berhasil diunduh.', 'success');
+    onShowNotice('Unduh Berhasil', 'Template Excel (.xlsx) data guru dengan lembar panduan berhasil diunduh.', 'success');
+  };
+
+  const handleDownloadCsvTemplate = () => {
+    downloadTeacherCsvTemplate(config);
+    onShowNotice('Unduh Berhasil', 'Template CSV (.csv) data guru berhasil diunduh.', 'success');
+  };
+
+  // Safe cell string cleaner
+  const cleanCellValue = (val: any): string => {
+    if (val === null || val === undefined) return '';
+    let str = String(val).trim();
+    // Check if exponential number representation like 1.98203e+17
+    if (/^\d+\.?\d*e\+\d+$/i.test(str)) {
+      try {
+        str = BigInt(Math.round(Number(str))).toString();
+      } catch {
+        // keep string
+      }
+    }
+    return str;
   };
 
   const parseFile = async (uploadedFile: File) => {
@@ -62,17 +84,21 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
       const data = await uploadedFile.arrayBuffer();
       const workbook = XLSX.read(data, { type: 'array' });
 
-      const sheetName = workbook.SheetNames[0];
-      if (!sheetName) {
-        setParseErrors(['Berkas Excel tidak memiliki lembar kerja (sheet) yang valid.']);
+      // Find template sheet or fallback to first sheet
+      const targetSheetName =
+        workbook.SheetNames.find((s) => s.toUpperCase().includes('GURU') || s.toUpperCase().includes('TEMPLATE')) ||
+        workbook.SheetNames[0];
+
+      if (!targetSheetName) {
+        setParseErrors(['Berkas tidak memiliki lembar kerja (sheet) yang valid.']);
         return;
       }
 
-      const worksheet = workbook.Sheets[sheetName];
+      const worksheet = workbook.Sheets[targetSheetName];
       const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
       if (rows.length === 0) {
-        setParseErrors(['Berkas Excel kosong. Pastikan mengunggah file yang berisi data.']);
+        setParseErrors(['Berkas kosong. Pastikan mengunggah file yang memuat data guru.']);
         return;
       }
 
@@ -94,60 +120,68 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
         const row = rows[i];
         if (!row || !Array.isArray(row)) continue;
 
-        const rowStr = row.map((cell) => String(cell).toUpperCase().trim());
-        const hasNama = rowStr.some((c) => c.includes('NAMA'));
-        const hasNip = rowStr.some((c) => c.includes('NIP') || c.includes('NUPTK'));
-        const hasMapel = rowStr.some((c) => c.includes('MAPEL') || c.includes('PELAJARAN'));
+        const rowStr = row.map((cell) => cleanCellValue(cell).toUpperCase());
+        const hasNama = rowStr.some((c) => c.includes('NAMA') || c.includes('GELAR'));
+        const hasNip = rowStr.some((c) => c.includes('NIP') || c.includes('NUPTK') || c.includes('INDUK'));
+        const hasMapel = rowStr.some((c) => c.includes('MAPEL') || c.includes('PELAJARAN') || c.includes('BIDANG'));
 
         if (hasNama || hasNip || hasMapel) {
           headerRowIndex = i;
           rowStr.forEach((col, idx) => {
-            if (col.includes('NO') && !col.includes('HP') && colIdx.no === -1) colIdx.no = idx;
-            else if (col.includes('NAMA') && colIdx.nama === -1) colIdx.nama = idx;
-            else if ((col.includes('NIP') || col.includes('NUPTK')) && colIdx.nip === -1) colIdx.nip = idx;
-            else if (col.includes('USER') && colIdx.username === -1) colIdx.username = idx;
-            else if ((col.includes('PASS') || col.includes('SANDI')) && colIdx.password === -1) colIdx.password = idx;
-            else if ((col.includes('MAPEL') || col.includes('PELAJARAN')) && colIdx.mapel === -1) colIdx.mapel = idx;
-            else if ((col.includes('WALI') || col.includes('KELAS')) && colIdx.waliKelas === -1) colIdx.waliKelas = idx;
-            else if (
-              (col.includes('HP') || col.includes('KONTAK') || col.includes('WA') || col.includes('TELP')) &&
+            if ((col.includes('NO') || col === 'NO.') && !col.includes('HP') && !col.includes('WA') && colIdx.no === -1) {
+              colIdx.no = idx;
+            } else if ((col.includes('NAMA') || col.includes('GELAR')) && colIdx.nama === -1) {
+              colIdx.nama = idx;
+            } else if ((col.includes('NIP') || col.includes('NUPTK') || col.includes('INDUK')) && colIdx.nip === -1) {
+              colIdx.nip = idx;
+            } else if ((col.includes('USER') || col.includes('LOGIN')) && colIdx.username === -1) {
+              colIdx.username = idx;
+            } else if ((col.includes('PASS') || col.includes('SANDI')) && colIdx.password === -1) {
+              colIdx.password = idx;
+            } else if ((col.includes('MAPEL') || col.includes('PELAJARAN') || col.includes('BIDANG')) && colIdx.mapel === -1) {
+              colIdx.mapel = idx;
+            } else if ((col.includes('WALI') || col.includes('BINAAN') || col.includes('KELAS')) && colIdx.waliKelas === -1) {
+              colIdx.waliKelas = idx;
+            } else if (
+              (col.includes('HP') || col.includes('KONTAK') || col.includes('WA') || col.includes('TELP') || col.includes('TELEPON')) &&
               colIdx.kontak === -1
-            )
+            ) {
               colIdx.kontak = idx;
-            else if (col.includes('STATUS') && colIdx.status === -1) colIdx.status = idx;
+            } else if ((col.includes('STATUS') || col.includes('AKTIF')) && colIdx.status === -1) {
+              colIdx.status = idx;
+            }
           });
           break;
         }
       }
 
-      // Default column mapping if header missing
+      // Default column mapping fallback if header missing
       if (headerRowIndex === -1) {
         headerRowIndex = 0;
         colIdx = {
-          no: 0,
+          no: -1,
+          nip: 0,
           nama: 1,
-          nip: 2,
-          username: 3,
-          password: 4,
-          mapel: 5,
-          waliKelas: 6,
-          kontak: 7,
-          status: 8,
+          username: 2,
+          password: 3,
+          mapel: 4,
+          waliKelas: 5,
+          kontak: 6,
+          status: 7,
         };
       }
 
       if (colIdx.nama === -1) colIdx.nama = 1;
-      if (colIdx.nip === -1) colIdx.nip = 2;
-      if (colIdx.username === -1) colIdx.username = 3;
-      if (colIdx.password === -1) colIdx.password = 4;
-      if (colIdx.mapel === -1) colIdx.mapel = 5;
-      if (colIdx.waliKelas === -1) colIdx.waliKelas = 6;
-      if (colIdx.kontak === -1) colIdx.kontak = 7;
-      if (colIdx.status === -1) colIdx.status = 8;
+      if (colIdx.nip === -1) colIdx.nip = 0;
+      if (colIdx.username === -1) colIdx.username = 2;
+      if (colIdx.password === -1) colIdx.password = 3;
+      if (colIdx.mapel === -1) colIdx.mapel = 4;
+      if (colIdx.waliKelas === -1) colIdx.waliKelas = 5;
+      if (colIdx.kontak === -1) colIdx.kontak = 6;
+      if (colIdx.status === -1) colIdx.status = 7;
 
       const dataRows = rows.slice(headerRowIndex + 1);
       const tempRows: ParsedTeacherRow[] = [];
-      const errors: string[] = [];
 
       const seenFileNips = new Set<string>();
       const seenFileUsernames = new Set<string>();
@@ -155,18 +189,37 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
       dataRows.forEach((row, idx) => {
         if (!row || row.length === 0) return;
 
-        const rawNama = String(row[colIdx.nama] ?? '').trim();
-        if (!rawNama || rawNama.toLowerCase() === 'nama guru' || rawNama.startsWith('contoh:')) {
+        const rawNama = cleanCellValue(row[colIdx.nama]);
+        if (
+          !rawNama ||
+          rawNama.toLowerCase() === 'nama guru' ||
+          rawNama.toLowerCase().startsWith('contoh:') ||
+          rawNama.toLowerCase().startsWith('tulis nama') ||
+          rawNama.toLowerCase().startsWith('===')
+        ) {
           return;
         }
 
-        const rawNip = String(row[colIdx.nip] ?? '').trim() || '-';
-        let rawUsername = String(row[colIdx.username] ?? '').trim().toLowerCase().replace(/\s+/g, '');
-        let rawPassword = String(row[colIdx.password] ?? '').trim();
-        const rawMapel = String(row[colIdx.mapel] ?? '').trim() || 'Semua Mata Pelajaran';
-        const rawWali = String(row[colIdx.waliKelas] ?? '').trim();
-        const rawKontak = String(row[colIdx.kontak] ?? '').trim();
-        const rawStatus = String(row[colIdx.status] ?? '').toUpperCase().trim();
+        let rawNip = cleanCellValue(row[colIdx.nip]);
+        if (!rawNip || rawNip === '0' || rawNip.toLowerCase() === 'null' || rawNip.toLowerCase() === 'none') {
+          rawNip = '-';
+        }
+
+        let rawUsername = cleanCellValue(row[colIdx.username]).toLowerCase().replace(/\s+/g, '');
+        let rawPassword = cleanCellValue(row[colIdx.password]);
+        const rawMapel = cleanCellValue(row[colIdx.mapel]) || 'Semua Mata Pelajaran';
+        let rawWali = cleanCellValue(row[colIdx.waliKelas]);
+        let rawKontak = cleanCellValue(row[colIdx.kontak]).replace(/[^\d+]/g, '');
+        const rawStatus = cleanCellValue(row[colIdx.status]).toUpperCase();
+
+        // Normalize phone numbers (e.g. 81234567890 -> 081234567890)
+        if (rawKontak.startsWith('8') && rawKontak.length >= 9 && rawKontak.length <= 13) {
+          rawKontak = '0' + rawKontak;
+        } else if (rawKontak.startsWith('628')) {
+          rawKontak = '08' + rawKontak.substring(3);
+        } else if (rawKontak.startsWith('+628')) {
+          rawKontak = '08' + rawKontak.substring(4);
+        }
 
         if (rawNama.length < 2) {
           tempRows.push({
@@ -181,11 +234,12 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
               createdAt: new Date().toISOString(),
             },
             statusType: 'INVALID',
-            statusNote: 'Nama guru terlalu pendek atau tidak sesuai.',
+            statusNote: 'Nama guru tidak valid atau terlalu pendek.',
           });
           return;
         }
 
+        // Auto-generate username from name if not provided
         if (!rawUsername) {
           const cleanName = rawNama
             .toLowerCase()
@@ -196,12 +250,20 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
           rawUsername = cleanName ? `${cleanName}.guru` : `guru.${idx + 1}`;
         }
 
+        // Auto-generate default password if blank
         if (!rawPassword) {
-          rawPassword = 'guru' + Math.floor(1000 + Math.random() * 9000);
+          rawPassword = 'guru123';
         }
 
         const validStatus: 'AKTIF' | 'NONAKTIF' = rawStatus === 'NONAKTIF' ? 'NONAKTIF' : 'AKTIF';
-        const waliKelasVal = rawWali && rawWali !== '-' && rawWali !== 'Bukan Wali Kelas' ? rawWali : undefined;
+        const waliKelasVal =
+          rawWali &&
+          rawWali !== '-' &&
+          rawWali.toLowerCase() !== 'bukan wali kelas' &&
+          rawWali.toLowerCase() !== 'none' &&
+          rawWali.toLowerCase() !== 'tidak'
+            ? rawWali
+            : undefined;
 
         const teacherObj: TeacherUser = {
           id: `guru-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
@@ -259,25 +321,24 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
       });
 
       if (tempRows.length === 0) {
-        errors.push('Tidak ada baris data guru yang valid ditemukan dalam berkas Excel.');
+        setParseErrors(['Tidak ada baris data guru yang dapat dibaca dari file ini. Pastikan menggunakan template resmi.']);
       }
 
       setParsedRows(tempRows);
-      setParseErrors(errors);
     } catch (err: any) {
-      console.error('Error parsing excel:', err);
-      setParseErrors([`Gagal membaca berkas Excel: ${err?.message || 'Format tidak didukung'}`]);
+      console.error('Parse teacher file error:', err);
+      setParseErrors([`Gagal membaca berkas: ${err.message || 'Format berkas tidak sesuai.'}`]);
     }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      parseFile(selected);
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      parseFile(selectedFile);
     }
   };
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files?.[0];
@@ -286,39 +347,38 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
     }
   };
 
-  // Validation summaries
-  const stats = useMemo(() => {
-    let baru = 0;
-    let update = 0;
-    let duplikat = 0;
-    let invalid = 0;
-
-    parsedRows.forEach((r) => {
-      if (r.statusType === 'BARU') baru++;
-      else if (r.statusType === 'UPDATE_NIP' || r.statusType === 'UPDATE_USER') update++;
-      else if (r.statusType === 'DUPLIKAT_FILE') duplikat++;
-      else if (r.statusType === 'INVALID') invalid++;
-    });
-
-    return { baru, update, duplikat, invalid, total: parsedRows.length };
+  const validTeachersToImport = useMemo(() => {
+    return parsedRows
+      .filter((r) => r.statusType !== 'INVALID' && r.statusType !== 'DUPLIKAT_FILE')
+      .map((r) => r.teacher);
   }, [parsedRows]);
 
-  const handleConfirmImport = async () => {
-    const validTeachers = parsedRows
-      .filter((r) => r.statusType !== 'INVALID')
-      .map((r) => r.teacher);
+  const summary = useMemo(() => {
+    const baru = parsedRows.filter((r) => r.statusType === 'BARU').length;
+    const updateNip = parsedRows.filter((r) => r.statusType === 'UPDATE_NIP').length;
+    const updateUser = parsedRows.filter((r) => r.statusType === 'UPDATE_USER').length;
+    const duplikat = parsedRows.filter((r) => r.statusType === 'DUPLIKAT_FILE').length;
+    const invalid = parsedRows.filter((r) => r.statusType === 'INVALID').length;
+    return { baru, update: updateNip + updateUser, duplikat, invalid, total: parsedRows.length };
+  }, [parsedRows]);
 
-    if (validTeachers.length === 0) {
-      onShowNotice('Gagal Impor', 'Tidak ada baris guru yang valid untuk diimpor.', 'warning');
+  const handleExecuteImport = async () => {
+    if (validTeachersToImport.length === 0) {
+      onShowNotice('Tidak Ada Data Valid', 'Tidak ada data guru valid yang dapat diimpor.', 'warning');
       return;
     }
 
-    setIsProcessing(true);
     try {
-      await onImport(validTeachers);
+      setIsProcessing(true);
+      await onImport(validTeachersToImport);
+      onShowNotice(
+        'Impor Berhasil',
+        `Sebanyak ${validTeachersToImport.length} data guru berhasil diimpor & disinkronkan ke sistem.`,
+        'success'
+      );
       onClose();
     } catch (err: any) {
-      onShowNotice('Gagal Impor', err?.message || 'Terjadi kesalahan saat menyimpan data guru.', 'warning');
+      onShowNotice('Gagal Impor', err.message || 'Terjadi kesalahan saat menyimpan data guru.', 'warning');
     } finally {
       setIsProcessing(false);
     }
@@ -327,27 +387,30 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div className="bg-white rounded-3xl max-w-4xl w-full border border-slate-200 shadow-2xl flex flex-col max-h-[92vh] overflow-hidden">
         {/* Modal Header */}
-        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 to-indigo-950 text-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-400 flex items-center justify-center shadow-xs">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-900">
-                Impor & Validasi Akun Guru dari Excel
+              <h3 className="font-extrabold text-base text-white flex items-center gap-2">
+                <span>Impor Data Guru Massal (Excel / CSV)</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-400/20 text-emerald-300 border border-emerald-400/30">
+                  Resmi
+                </span>
               </h3>
-              <p className="text-xs text-slate-500">
-                Unggah berkas spreadsheet .xlsx / .xls dengan verifikasi otomatis NIP & username ganda.
+              <p className="text-xs text-slate-300">
+                Unggah template data guru untuk registrasi akun dan mata pelajaran pengampu secara cepat
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/10 rounded-xl transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -359,34 +422,46 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
           <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-2xl flex items-start gap-2.5 text-amber-900">
             <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <div className="space-y-0.5">
-              <p className="font-bold text-xs">Guru Mengampu Banyak Mata Pelajaran & Kelas Berbeda</p>
+              <p className="font-bold text-xs">Aturan Pengisian Mata Pelajaran &amp; Wali Kelas</p>
               <p className="text-[11px] text-amber-800 leading-relaxed">
-                Jika 1 guru mengajar hingga 3 mata pelajaran berbeda (misal: <strong>Matematika, IPA, Informatika</strong>), cukup tuliskan semua nama mata pelajaran yang dipisahkan dengan tanda koma (<strong>,</strong>) pada kolom Mapel. Guru dapat memilih kelas & mata pelajaran saat mengajar di Portal Guru.
+                &bull; <strong>Banyak Mata Pelajaran:</strong> Jika 1 guru mengajar hingga 3 mata pelajaran (misal: <strong>Matematika, IPA, Informatika</strong>), pisahkan nama mapel dengan tanda koma (<strong>,</strong>).<br />
+                &bull; <strong>Wali Kelas:</strong> Isi kode kelas seperti <strong>VII-A</strong>, <strong>VIII-B</strong>, atau tulis <strong>-</strong> jika bukan wali kelas.<br />
+                &bull; <strong>NIP:</strong> Jika guru honorer belum punya NIP, cukup isi tanda strip (<strong>-</strong>).
               </p>
             </div>
           </div>
 
-          {/* Template Download Card */}
-          <div className="p-4 bg-blue-50/80 border border-blue-100 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          {/* Template Download Card (Dual Buttons: Excel & CSV) */}
+          <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-2xs">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
                 <FileDown className="w-5 h-5" />
               </div>
               <div>
-                <p className="font-extrabold text-slate-900 text-xs">Belum memiliki template Excel guru?</p>
+                <p className="font-extrabold text-slate-900 text-xs">Unduh Template Resmi Pengisian Data Guru</p>
                 <p className="text-[11px] text-slate-600">
-                  Unduh template resmi dengan susunan kolom standar yang siap diisi.
+                  Sudah dilengkapi kolom teks aman, contoh isian, dan lembar referensi mata pelajaran.
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleDownloadTemplate}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shrink-0 shadow-2xs"
-            >
-              <Download className="w-4 h-4" />
-              <span>Unduh Template Excel</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={handleDownloadExcelTemplate}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Unduh Excel (.xlsx)</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadCsvTemplate}
+                className="px-3 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 transition cursor-pointer shadow-xs active:scale-95"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Unduh CSV (.csv)</span>
+              </button>
+            </div>
           </div>
 
           {/* Upload Dropzone */}
@@ -407,7 +482,7 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".xlsx, .xls"
+              accept=".xlsx, .xls, .csv"
               onChange={handleFileChange}
               className="hidden"
             />
@@ -416,15 +491,15 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
             </div>
             <div>
               <p className="font-bold text-slate-800 text-xs sm:text-sm">
-                {file ? file.name : 'Pilih Berkas Excel atau Tarik & Lepas di Sini'}
+                {file ? file.name : 'Pilih Berkas Excel (.xlsx / .xls) atau CSV (.csv) atau Tarik ke Sini'}
               </p>
               <p className="text-slate-400 text-[11px] mt-0.5">
-                Mendukung format .xlsx dan .xls (Maksimal 10MB)
+                Mendukung format .xlsx, .xls, dan .csv
               </p>
             </div>
             {file && (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2.5 py-0.5 rounded-full mt-0.5">
-                <CheckCircle2 className="w-3.5 h-3.5" /> Berkas Terpilih & Terbaca
+                <CheckCircle2 className="w-3.5 h-3.5" /> Berkas Terpilih &amp; Terbaca
               </span>
             )}
           </div>
@@ -448,107 +523,96 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
           {parsedRows.length > 0 && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-emerald-600" />
-                  <span className="font-extrabold text-slate-900 text-xs">
-                    Hasil Validasi ({stats.total} Baris)
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="font-extrabold text-slate-800">Ringkasan Validasi:</span>
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
+                    {summary.baru} Akun Baru
                   </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-bold">
-                  <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    {stats.baru} Akun Baru
-                  </span>
-                  {stats.update > 0 && (
-                    <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
-                      {stats.update} Diperbarui (NIP/User Ada)
+                  {summary.update > 0 && (
+                    <span className="px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 font-bold">
+                      {summary.update} Update Data
                     </span>
                   )}
-                  {stats.duplikat > 0 && (
-                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
-                      {stats.duplikat} Duplikat File
+                  {summary.duplikat > 0 && (
+                    <span className="px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 font-bold">
+                      {summary.duplikat} Duplikat
                     </span>
                   )}
-                  {stats.invalid > 0 && (
-                    <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 border border-rose-200">
-                      {stats.invalid} Tidak Sesuai
+                  {summary.invalid > 0 && (
+                    <span className="px-2 py-0.5 rounded-md bg-rose-100 text-rose-800 font-bold">
+                      {summary.invalid} Tidak Valid
                     </span>
                   )}
                 </div>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Total Terbaca: <strong>{summary.total}</strong> Baris
+                </span>
               </div>
 
-              <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-60 overflow-y-auto shadow-2xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 text-[10px] font-black uppercase text-slate-600 sticky top-0 border-b border-slate-200">
+              {/* Table */}
+              <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-2xs max-h-60 overflow-y-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-slate-100 text-slate-700 font-extrabold sticky top-0 border-b border-slate-200 z-10">
                     <tr>
-                      <th className="py-2.5 px-3 text-center">No</th>
-                      <th className="py-2.5 px-3">Nama Guru</th>
-                      <th className="py-2.5 px-3">NIP / NUPTK</th>
-                      <th className="py-2.5 px-3">Username</th>
-                      <th className="py-2.5 px-3">Mata Pelajaran</th>
-                      <th className="py-2.5 px-3">Wali Kelas</th>
-                      <th className="py-2.5 px-3">Status Validasi</th>
+                      <th className="p-2.5 w-8 text-center">No</th>
+                      <th className="p-2.5">NIP / NUPTK</th>
+                      <th className="p-2.5">Nama Guru &amp; Gelar</th>
+                      <th className="p-2.5">Username</th>
+                      <th className="p-2.5">Mata Pelajaran</th>
+                      <th className="p-2.5">Wali Kelas</th>
+                      <th className="p-2.5">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                  <tbody className="divide-y divide-slate-100">
                     {parsedRows.map((row, idx) => (
                       <tr
                         key={idx}
                         className={
                           row.statusType === 'INVALID'
-                            ? 'bg-rose-50/60'
+                            ? 'bg-rose-50/70'
                             : row.statusType === 'DUPLIKAT_FILE'
-                            ? 'bg-amber-50/60'
+                            ? 'bg-amber-50/70'
                             : row.statusType.startsWith('UPDATE')
-                            ? 'bg-blue-50/40'
+                            ? 'bg-blue-50/50'
                             : 'hover:bg-slate-50'
                         }
                       >
-                        <td className="py-2 px-3 text-center text-slate-400 font-bold">{idx + 1}</td>
-                        <td className="py-2 px-3 font-bold text-slate-900">{row.teacher.nama}</td>
-                        <td className="py-2 px-3 font-mono text-slate-500">{row.teacher.nip}</td>
-                        <td className="py-2 px-3 font-mono text-blue-600 font-bold">{row.teacher.username}</td>
-                        <td className="py-2 px-3 max-w-[180px] truncate" title={row.teacher.mapel}>
-                          {row.teacher.mapel}
+                        <td className="p-2.5 text-center text-slate-400 font-mono">{idx + 1}</td>
+                        <td className="p-2.5 font-mono text-slate-600">{row.teacher.nip || '-'}</td>
+                        <td className="p-2.5 font-bold text-slate-900">{row.teacher.nama}</td>
+                        <td className="p-2.5 font-mono text-blue-700">@{row.teacher.username}</td>
+                        <td className="p-2.5 text-slate-700">
+                          <div className="flex flex-wrap gap-1">
+                            {row.teacher.mapel.split(',').map((m, mIdx) => (
+                              <span key={mIdx} className="px-1.5 py-0.5 bg-slate-200 text-slate-800 rounded-sm text-[10px] font-medium">
+                                {m.trim()}
+                              </span>
+                            ))}
+                          </div>
                         </td>
-                        <td className="py-2 px-3">
+                        <td className="p-2.5">
                           {row.teacher.waliKelas ? (
-                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 rounded font-bold text-[10px]">
+                            <span className="px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md font-bold text-[10px]">
                               {row.teacher.waliKelas}
                             </span>
                           ) : (
                             <span className="text-slate-400">-</span>
                           )}
                         </td>
-                        <td className="py-2 px-3">
-                          {row.statusType === 'BARU' && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                              <CheckCircle2 className="w-3 h-3" /> Baru
-                            </span>
-                          )}
-                          {(row.statusType === 'UPDATE_NIP' || row.statusType === 'UPDATE_USER') && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full"
-                              title={row.statusNote}
-                            >
-                              <RefreshCw className="w-3 h-3" /> {row.statusType === 'UPDATE_NIP' ? 'NIP Ada' : 'User Ada'}
-                            </span>
-                          )}
-                          {row.statusType === 'DUPLIKAT_FILE' && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full"
-                              title={row.statusNote}
-                            >
-                              <AlertTriangle className="w-3 h-3" /> Duplikat
-                            </span>
-                          )}
-                          {row.statusType === 'INVALID' && (
-                            <span
-                              className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full"
-                              title={row.statusNote}
-                            >
-                              <AlertTriangle className="w-3 h-3" /> Format Gagal
-                            </span>
-                          )}
+                        <td className="p-2.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-black inline-block ${
+                              row.statusType === 'BARU'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : row.statusType.startsWith('UPDATE')
+                                ? 'bg-blue-100 text-blue-800'
+                                : row.statusType === 'DUPLIKAT_FILE'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-rose-100 text-rose-800'
+                            }`}
+                          >
+                            {row.statusNote}
+                          </span>
                         </td>
                       </tr>
                     ))}
@@ -560,35 +624,30 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex items-center justify-between gap-3">
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-slate-600 hover:text-slate-800 font-bold text-xs rounded-xl cursor-pointer"
-            disabled={isProcessing}
+            className="px-4 py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded-xl font-bold text-xs transition cursor-pointer"
           >
-            Batal
+            Tutup
           </button>
 
           <button
             type="button"
-            onClick={handleConfirmImport}
-            disabled={parsedRows.length === 0 || isProcessing}
-            className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition cursor-pointer shadow-xs ${
-              parsedRows.length > 0 && !isProcessing
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-            }`}
+            onClick={handleExecuteImport}
+            disabled={validTeachersToImport.length === 0 || isProcessing}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-extrabold text-xs flex items-center gap-2 shadow-xs transition cursor-pointer active:scale-95"
           >
             {isProcessing ? (
               <>
-                <Sparkles className="w-4 h-4 animate-spin" />
-                <span>Menyimpan ke Sistem...</span>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Memproses Impor Data...</span>
               </>
             ) : (
               <>
-                <FileSpreadsheet className="w-4 h-4" />
-                <span>Konfirmasi & Simpan {stats.total > 0 ? `(${stats.baru + stats.update} Guru)` : ''}</span>
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Impor {validTeachersToImport.length} Data Guru Sekarang</span>
               </>
             )}
           </button>

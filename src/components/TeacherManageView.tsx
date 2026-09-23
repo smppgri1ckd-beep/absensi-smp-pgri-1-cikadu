@@ -30,7 +30,7 @@ import {
 import { TeacherUser, SchoolConfig } from '../types';
 import { OFFICIAL_SUBJECTS } from '../constants/subjects';
 import { TeacherImportModal } from './TeacherImportModal';
-import { downloadTeacherExcelTemplate } from '../utils/export';
+import { downloadTeacherExcelTemplate, downloadTeacherCsvTemplate } from '../utils/export';
 
 interface TeacherManageViewProps {
   teachers: TeacherUser[];
@@ -468,20 +468,20 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
             type="button"
             onClick={handleDownloadTemplate}
             className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            title="Unduh format template Excel untuk data guru"
+            title="Unduh format template Excel resmi dengan panduan pengisian untuk data guru"
           >
             <FileDown className="w-4 h-4 text-indigo-600" />
-            <span>Template Excel</span>
+            <span>Unduh Template</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowImportModal(true)}
             className="px-3.5 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            title="Impor data guru dari berkas Excel"
+            title="Impor data guru dari berkas Excel atau CSV"
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>Impor Excel</span>
+            <span>Impor Data Guru</span>
           </button>
 
           <button

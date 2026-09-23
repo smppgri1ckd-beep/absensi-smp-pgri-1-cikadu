@@ -51,12 +51,6 @@ import { WelcomeModal } from './components/WelcomeModal';
 import { LoginModal } from './components/LoginModal';
 import { NoticeModal, ConfirmModal } from './components/NoticeModal';
 import { NotificationBanner } from './components/NotificationBanner';
-import {
-  getCachedDriveToken,
-  executeFullDriveBackup,
-  addBackupHistoryItem,
-  DEFAULT_DRIVE_FOLDER_ID,
-} from './utils/googleDriveBackup';
 
 export default function App() {
   const [students, setStudents] = useState<Student[]>(() => {
@@ -1451,89 +1445,6 @@ export default function App() {
       }
     }
   };
-
-  // Daily Auto-Backup to Google Drive check
-  useEffect(() => {
-    const checkDailyBackup = async () => {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const backupConfig = config.googleDriveBackup;
-
-      if (
-        backupConfig?.autoDailyBackup !== false &&
-        backupConfig?.lastBackupDate !== todayStr &&
-        students.length > 0
-      ) {
-        const token = getCachedDriveToken();
-        if (token) {
-          try {
-            console.log('[AutoBackup] Memulai pencadangan harian otomatis ke Google Drive...');
-            const fullPayload = {
-              version: '2.0',
-              exportedAt: new Date().toISOString(),
-              schoolName: config.namaSekolah || 'SMP PGRI 1 CIKADU',
-              npsn: config.npsn || '69919136',
-              config,
-              students,
-              attendance,
-              journals: teachingJournals,
-              teachers,
-              kalenderHeb: kalenderHebData,
-            };
-
-            const targetFolder = backupConfig?.folderId || DEFAULT_DRIVE_FOLDER_ID;
-            const res = await executeFullDriveBackup(token, targetFolder, fullPayload);
-
-            const updatedConfig: SchoolConfig = {
-              ...config,
-              googleDriveBackup: {
-                ...(config.googleDriveBackup || {
-                  enabled: true,
-                  folderId: targetFolder,
-                  folderUrl: `https://drive.google.com/drive/u/0/folders/${targetFolder}`,
-                  autoDailyBackup: true,
-                }),
-                lastBackupDate: todayStr,
-                lastBackupTimestamp: new Date().toISOString(),
-                lastBackupStatus: 'SUCCESS',
-                lastBackupMessage: `Backup harian otomatis sukses (${res.uploadedFiles.length} berkas).`,
-              },
-            };
-
-            await handleUpdateConfig(updatedConfig);
-
-            addBackupHistoryItem({
-              id: `auto-${Date.now()}`,
-              timestamp: new Date().toISOString(),
-              date: todayStr,
-              time: new Date().toLocaleTimeString('id-ID'),
-              totalStudents: students.length,
-              totalAttendance: attendance.length,
-              totalJournals: teachingJournals.length,
-              totalTeachers: teachers.length,
-              fileNames: res.uploadedFiles.map((f) => f.fileName),
-              driveFolderId: targetFolder,
-              status: 'SUCCESS',
-              source: 'AUTO_DAILY',
-              message: 'Backup harian otomatis tersinkronisasi ke Google Drive',
-              driveWebLink: res.uploadedFiles[0]?.webViewLink,
-            });
-
-            console.log('[AutoBackup] Cadangan harian Google Drive berhasil disinkronkan.');
-          } catch (err) {
-            console.warn('[AutoBackup] Gagal menjalankan backup harian background:', err);
-          }
-        }
-      }
-    };
-
-    const timer = setTimeout(checkDailyBackup, 4000);
-    return () => clearTimeout(timer);
-  }, [
-    config.googleDriveBackup?.lastBackupDate,
-    config.googleDriveBackup?.autoDailyBackup,
-    students.length,
-    attendance.length,
-  ]);
 
   const handleToggleSessionManual = () => {
     const next = computedSession === 'Pagi' ? 'Siang' : 'Pagi';

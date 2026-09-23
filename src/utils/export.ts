@@ -534,58 +534,304 @@ export async function exportSingleStudentAttendancePDF(
 }
 
 /**
- * Download standard Excel template for bulk importing teachers
+ * Download standard Excel template for bulk importing teachers (.xlsx)
  */
 export function downloadTeacherExcelTemplate(config?: SchoolConfig) {
-  const schoolName = config?.namaSekolah || 'Sekolah';
+  const schoolName = config?.namaSekolah || 'SMP PGRI 1 CIKADU';
   const wb = XLSX.utils.book_new();
 
-  const wsData = [
-    ['NIP / NUPTK', 'NAMA GURU & GELAR', 'USERNAME', 'PASSWORD', 'MATA PELAJARAN', 'WALI KELAS', 'NO HP / WHATSAPP', 'STATUS'],
-    ['198501152010011005', 'Drs. Budi Santoso, M.Pd.', 'budi.santoso', 'guru123', 'Matematika', 'VII-A', '081234567890', 'AKTIF'],
-    ['199008202015022003', 'Siti Rahmawati, S.Pd.', 'siti.rahmawati', 'guru123', 'Bahasa Indonesia', 'VIII-A', '085678901234', 'AKTIF'],
-    ['199203102019031008', 'Ahmad Fauzi, S.Pd.', 'ahmad.fauzi', 'guru123', 'Ilmu Pengetahuan Alam (IPA)', 'Bukan Wali Kelas', '087812345678', 'AKTIF'],
-    ['-', 'Nurul Hidayah, S.Pd.I.', 'nurul.hidayah', 'guru123', 'Pendidikan Agama Islam dan Budi Pekerti', 'IX-A', '081398765432', 'AKTIF'],
+  // Sheet 1: TEMPLATE_GURU (Main Data Entry Sheet)
+  const headers = [
+    'NIP / NUPTK',
+    'NAMA GURU & GELAR',
+    'USERNAME',
+    'PASSWORD',
+    'MATA PELAJARAN',
+    'WALI KELAS',
+    'NO HP / WHATSAPP',
+    'STATUS',
   ];
 
+  const sampleRows = [
+    [
+      '198203152008011004',
+      'Drs. H. Budi Santoso, M.Pd.',
+      'budi.santoso',
+      'guru123',
+      'Matematika',
+      'VII-A',
+      '081234567890',
+      'AKTIF',
+    ],
+    [
+      '199105202022212009',
+      'Siti Rahmawati, S.Pd.',
+      'siti.rahmawati',
+      'guru123',
+      'Bahasa Indonesia',
+      'VIII-A',
+      '085678901234',
+      'AKTIF',
+    ],
+    [
+      '199407122020121005',
+      'Ahmad Fauzi, S.Pd., Gr.',
+      'ahmad.fauzi',
+      'guru123',
+      'Ilmu Pengetahuan Alam (IPA)',
+      'IX-A',
+      '087812345678',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Nurul Hidayah, S.Pd.I.',
+      'nurul.hidayah',
+      'guru123',
+      'Pendidikan Agama Islam dan Budi Pekerti',
+      'VII-B',
+      '081398765432',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Rizky Pratama, S.Kom.',
+      'rizky.pratama',
+      'guru123',
+      'Informatika, Prakarya',
+      '-',
+      '082155667788',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Dewi Lestari, S.Pd.',
+      'dewi.lestari',
+      'guru123',
+      'Pendidikan Jasmani Olahraga dan Kesehatan (PJOK), Seni Budaya',
+      'VIII-B',
+      '081987654321',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Cecep Supriatna, S.Pd.',
+      'cecep.supriatna',
+      'guru123',
+      'Bahasa Inggris, Bahasa Sunda',
+      '-',
+      '085211223344',
+      'AKTIF',
+    ],
+  ];
+
+  // Build sheet with strict text types to prevent scientific notation on NIP and phone numbers
+  const wsData = [headers, ...sampleRows];
   const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Enforce text formatting on all cells so leading zeros and long NIP numbers stay intact
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:H8');
+  for (let R = range.s.r; R <= range.e.r; ++R) {
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+      if (ws[cellAddress]) {
+        ws[cellAddress].t = 's'; // Force string type
+        ws[cellAddress].z = '@'; // Force text format
+      }
+    }
+  }
 
   // Column width formatting
   ws['!cols'] = [
-    { wch: 22 }, // NIP
-    { wch: 32 }, // NAMA
-    { wch: 20 }, // USERNAME
+    { wch: 24 }, // NIP / NUPTK
+    { wch: 34 }, // NAMA GURU & GELAR
+    { wch: 22 }, // USERNAME
     { wch: 18 }, // PASSWORD
-    { wch: 36 }, // MAPEL
+    { wch: 46 }, // MATA PELAJARAN
     { wch: 18 }, // WALI KELAS
-    { wch: 20 }, // NO HP
+    { wch: 22 }, // NO HP / WHATSAPP
     { wch: 14 }, // STATUS
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'TEMPLATE_GURU');
 
-  // Sheet Petunjuk Pengisian
-  const petunjukData = [
-    ['PETUNJUK PENGISIAN TEMPLATE IMPOR DATA GURU'],
-    ['Aplikasi E-Presensi Sekolah'],
+  // Sheet 2: PETUNJUK_DAN_CONTOH (Comprehensive Guide & Subject List)
+  const petunjukRows = [
+    ['PANDUAN & PETUNJUK PENGISIAN TEMPLATE IMPOR DATA GURU'],
+    [`Instansi: ${schoolName}`],
+    ['Gunakan template ini untuk mengisi data guru secara massal agar tidak terjadi kesalahan sistem.'],
     [],
-    ['KOLOM', 'KEBUTUHAN', 'KETERANGAN & CONTOH'],
-    ['NIP / NUPTK', 'Opsional', 'Isi NIP atau NUPTK guru. Jika belum ada NIP/GTT, isi dengan tanda strip (-) atau kosongkan.'],
-    ['NAMA GURU & GELAR', 'Wajib', 'Nama lengkap beserta gelar akademik guru (contoh: Drs. Budi Santoso, M.Pd.)'],
-    ['USERNAME', 'Wajib / Otomatis', 'Username untuk login portal guru. Jika dikosongkan, sistem akan membuatkan otomatis dari nama/NIP.'],
-    ['PASSWORD', 'Wajib / Otomatis', 'Kata sandi akun portal guru. Jika dikosongkan, kata sandi default adalah guru123.'],
-    ['MATA PELAJARAN', 'Wajib', 'Mata pelajaran yang diampu guru (contoh: Matematika, IPA, PJOK, dll.)'],
-    ['WALI KELAS', 'Opsional', 'Isi kode kelas binaan (contoh: VII-A, VIII-B) atau "Bukan Wali Kelas" / kosong jika bukan wali kelas.'],
-    ['NO HP / WHATSAPP', 'Opsional', 'Nomor telepon aktif / WhatsApp guru untuk kontak darurat & koordinasi.'],
-    ['STATUS', 'Wajib', 'Status keaktifan akun: AKTIF atau NONAKTIF (default: AKTIF).'],
+    ['=== ATURAN PENGISIAN SETIAP KOLOM ==='],
+    ['NAMA KOLOM', 'KEWAJIBAN', 'ATURAN & CONTOH PENULISAN'],
+    [
+      'NIP / NUPTK',
+      'Opsional',
+      'Isi 18 digit NIP PNS/PPPK atau 16 digit NUPTK. Jika guru Honorer / GTT belum memiliki NIP, isi dengan tanda strip (-) atau kosongkan.',
+    ],
+    [
+      'NAMA GURU & GELAR',
+      'Wajib',
+      'Tulis nama lengkap beserta gelar akademik guru (contoh: Drs. H. Budi Santoso, M.Pd. atau Siti Rahmawati, S.Pd.).',
+    ],
+    [
+      'USERNAME',
+      'Wajib / Otomatis',
+      'Username untuk login ke Portal Guru (gunakan huruf kecil tanpa spasi, contoh: budi.santoso). Jika dikosongkan, sistem akan membuatkan otomatis.',
+    ],
+    [
+      'PASSWORD',
+      'Wajib / Otomatis',
+      'Kata sandi awal untuk login (contoh: guru123). Jika dikosongkan, kata sandi bawaan adalah guru123.',
+    ],
+    [
+      'MATA PELAJARAN',
+      'Wajib',
+      'Tulis mata pelajaran yang diampu. JIKA 1 GURU MENGAJAR LEBIH DARI 1 MAPEL, PISAHKAN DENGAN TANDA KOMA (contoh: "Matematika, IPA, Informatika"). Guru dapat memilih mapel saat mengajar di kelas.',
+    ],
+    [
+      'WALI KELAS',
+      'Opsional',
+      'Isi kode kelas binaan (contoh: VII-A, VII-B, VIII-A, VIII-B, IX-A, IX-B). Jika bukan wali kelas, isi tanda strip (-) atau "Bukan Wali Kelas".',
+    ],
+    [
+      'NO HP / WHATSAPP',
+      'Opsional',
+      'Nomor WhatsApp aktif guru diawali angka 08 (contoh: 081234567890). Nomor ini digunakan untuk kontak darurat dan koordinasi.',
+    ],
+    [
+      'STATUS',
+      'Wajib',
+      'Status keaktifan akun. Isi dengan: "AKTIF" (agar bisa login) atau "NONAKTIF" (default: AKTIF).',
+    ],
+    [],
+    ['=== DAFTAR REFERENSI MATA PELAJARAN UMUM (SMP) ==='],
+    ['1', 'Pendidikan Agama Islam dan Budi Pekerti', 'PAI'],
+    ['2', 'Pendidikan Pancasila dan Kewarganegaraan (PPKn)', 'PPKn'],
+    ['3', 'Bahasa Indonesia', 'Bahasa Indonesia'],
+    ['4', 'Matematika', 'Matematika'],
+    ['5', 'Ilmu Pengetahuan Alam (IPA)', 'IPA'],
+    ['6', 'Ilmu Pengetahuan Sosial (IPS)', 'IPS'],
+    ['7', 'Bahasa Inggris', 'Bahasa Inggris'],
+    ['8', 'Pendidikan Jasmani Olahraga dan Kesehatan (PJOK)', 'PJOK'],
+    ['9', 'Seni Budaya', 'Seni Budaya'],
+    ['10', 'Prakarya', 'Prakarya'],
+    ['11', 'Informatika', 'Informatika'],
+    ['12', 'Bahasa Sunda', 'Bahasa Sunda / Muatan Lokal'],
+    ['13', 'Bimbingan dan Konseling (BK)', 'BK'],
+    [],
+    ['=== TIPS PENTING AGAR TIDAK GAGAL IMPOR ==='],
+    ['1', 'Jangan mengubah atau menghapus baris judul (Header baris ke-1) di lembar "TEMPLATE_GURU".', ''],
+    ['2', 'Pastikan nama guru tidak kosong.', ''],
+    ['3', 'Format file yang didukung saat unggah adalah .xlsx, .xls, atau .csv.', ''],
   ];
 
-  const wsPetunjuk = XLSX.utils.aoa_to_sheet(petunjukData);
-  wsPetunjuk['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 65 }];
-  XLSX.utils.book_append_sheet(wb, wsPetunjuk, 'PETUNJUK_PENGISIAN');
+  const wsPetunjuk = XLSX.utils.aoa_to_sheet(petunjukRows);
+  wsPetunjuk['!cols'] = [{ wch: 26 }, { wch: 32 }, { wch: 75 }];
+  XLSX.utils.book_append_sheet(wb, wsPetunjuk, 'PETUNJUK_DAN_CONTOH');
 
   const dateStr = new Date().toISOString().split('T')[0];
   XLSX.writeFile(wb, `Template_Impor_Guru_${schoolName.replace(/\s+/g, '_')}_${dateStr}.xlsx`);
+}
+
+/**
+ * Download standard CSV template for bulk importing teachers (.csv)
+ */
+export function downloadTeacherCsvTemplate(config?: SchoolConfig) {
+  const schoolName = config?.namaSekolah || 'SMP PGRI 1 CIKADU';
+  const headers = [
+    'NIP / NUPTK',
+    'NAMA GURU & GELAR',
+    'USERNAME',
+    'PASSWORD',
+    'MATA PELAJARAN',
+    'WALI KELAS',
+    'NO HP / WHATSAPP',
+    'STATUS',
+  ];
+
+  const sampleRows = [
+    [
+      '198203152008011004',
+      'Drs. H. Budi Santoso, M.Pd.',
+      'budi.santoso',
+      'guru123',
+      'Matematika',
+      'VII-A',
+      '081234567890',
+      'AKTIF',
+    ],
+    [
+      '199105202022212009',
+      'Siti Rahmawati, S.Pd.',
+      'siti.rahmawati',
+      'guru123',
+      'Bahasa Indonesia',
+      'VIII-A',
+      '085678901234',
+      'AKTIF',
+    ],
+    [
+      '199407122020121005',
+      'Ahmad Fauzi, S.Pd.',
+      'ahmad.fauzi',
+      'guru123',
+      'Ilmu Pengetahuan Alam (IPA)',
+      'IX-A',
+      '087812345678',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Nurul Hidayah, S.Pd.I.',
+      'nurul.hidayah',
+      'guru123',
+      'Pendidikan Agama Islam dan Budi Pekerti',
+      'VII-B',
+      '081398765432',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Rizky Pratama, S.Kom.',
+      'rizky.pratama',
+      'guru123',
+      'Informatika, Prakarya',
+      '-',
+      '082155667788',
+      'AKTIF',
+    ],
+    [
+      '-',
+      'Dewi Lestari, S.Pd.',
+      'dewi.lestari',
+      'guru123',
+      'Pendidikan Jasmani Olahraga dan Kesehatan (PJOK), Seni Budaya',
+      'VIII-B',
+      '081987654321',
+      'AKTIF',
+    ],
+  ];
+
+  const escapeCsvVal = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
+  const csvContent =
+    '\uFEFF' +
+    [
+      headers.map(escapeCsvVal).join(','),
+      ...sampleRows.map((row) => row.map(escapeCsvVal).join(',')),
+    ].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const dateStr = new Date().toISOString().split('T')[0];
+  const fileName = `Template_Impor_Guru_${schoolName.replace(/\s+/g, '_')}_${dateStr}.csv`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
 }
 
 /**

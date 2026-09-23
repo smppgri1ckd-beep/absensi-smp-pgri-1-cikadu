@@ -154,6 +154,8 @@ export const DEFAULT_SCHOOL_CONFIG: SchoolConfig = {
     afternoonCutoff: "17:00",
     autoSwitchSession: true,
     soundNotification: true,
+    restrictOutOfHours: true,
+    outOfHoursMessage: "Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.",
   },
   googleDriveBackup: {
     enabled: true,

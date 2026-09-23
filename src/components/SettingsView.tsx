@@ -20,6 +20,8 @@ import {
   User,
   Camera,
   ShieldCheck,
+  ShieldAlert,
+  Lock,
   Phone,
   Database,
   X,
@@ -71,7 +73,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onShowNotice,
   onShowConfirm,
 }) => {
-  const [formData, setFormData] = useState<SchoolConfig>(config);
+  const [formData, setFormData] = useState<SchoolConfig>(() => ({
+    ...config,
+    schedule: {
+      restrictOutOfHours: true,
+      outOfHoursMessage: 'Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.',
+      ...config.schedule,
+    },
+  }));
   const [maintenanceYear, setMaintenanceYear] = useState<number>(new Date().getFullYear());
   const [maintenanceSem, setMaintenanceSem] = useState<'ganjil' | 'genap'>('ganjil');
   const [isSaving, setIsSaving] = useState(false);
@@ -517,6 +526,142 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </p>
             </div>
 
+            {/* 3. Out-of-Hours Attendance Protection & Rejection Notice */}
+            <div className="p-3.5 bg-gradient-to-br from-rose-50/80 via-slate-50 to-amber-50/50 border-2 border-rose-200/80 rounded-2xl space-y-3.5 shadow-2xs">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-rose-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center shadow-xs">
+                    <ShieldAlert className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-extrabold text-slate-900 text-xs block">
+                      Proteksi Jam Presensi (Tolak Scan di Luar Jam)
+                    </span>
+                    <span className="text-[10px] text-slate-500">
+                      Cegah siswa melakukan absensi di luar jam operasional yang telah ditentukan
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider self-start sm:self-auto border ${
+                    formData.schedule.restrictOutOfHours !== false
+                      ? 'bg-rose-100 text-rose-800 border-rose-300'
+                      : 'bg-slate-100 text-slate-600 border-slate-300'
+                  }`}
+                >
+                  {formData.schedule.restrictOutOfHours !== false
+                    ? '🛡️ Proteksi Jam Aktif'
+                    : '🔓 Bebas Jam (Nonaktif)'}
+                </span>
+              </div>
+
+              {/* Main Restriction Toggle */}
+              <label className="flex items-start justify-between p-3 bg-white hover:bg-rose-50/40 rounded-xl border border-rose-200 cursor-pointer transition shadow-2xs">
+                <div className="pr-3">
+                  <span className="font-bold text-slate-900 block text-xs">
+                    Kunci &amp; Batasi Absensi Hanya Pada Jam Operasional Sekolah
+                  </span>
+                  <span className="text-[11px] text-slate-600 leading-relaxed block mt-0.5">
+                    Jika diaktifkan, saat siswa melakukan scan kartu di luar jam masuk (<strong>{formData.schedule.morningStart} - {formData.schedule.morningCutoff} WIB</strong>) atau jam pulang (<strong>{formData.schedule.afternoonStart} - {formData.schedule.afternoonCutoff} WIB</strong>), sistem akan menolak pencatatan dan menampilkan popup peringatan modern.
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formData.schedule.restrictOutOfHours !== false}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      schedule: {
+                        ...formData.schedule,
+                        restrictOutOfHours: e.target.checked,
+                      },
+                    })
+                  }
+                  className="w-4 h-4 text-rose-600 rounded cursor-pointer mt-1 shrink-0"
+                />
+              </label>
+
+              {/* Custom Rejection Message Configuration */}
+              {formData.schedule.restrictOutOfHours !== false && (
+                <div className="space-y-2.5 pt-1 animate-in fade-in duration-200">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Pesan Peringatan Penolakan (Tampil di Layar Siswa):
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        formData.schedule.outOfHoursMessage ||
+                        'Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.'
+                      }
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          schedule: {
+                            ...formData.schedule,
+                            outOfHoursMessage: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Masukkan kalimat penolakan..."
+                      className="w-full px-3 py-2 bg-white border border-rose-300 focus:border-rose-500 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs focus:outline-hidden"
+                    />
+                  </div>
+
+                  {/* Preset Suggestions */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] text-slate-500 font-bold block">
+                      Pilihan Template Pesan Cepat:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        'Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.',
+                        'Gerbang presensi belum dibuka atau sudah melewati batas waktu.',
+                        'Di luar jam presensi resmi sekolah. Silakan temui guru piket.',
+                      ].map((presetText) => (
+                        <button
+                          key={presetText}
+                          type="button"
+                          onClick={() =>
+                            setFormData({
+                              ...formData,
+                              schedule: {
+                                ...formData.schedule,
+                                outOfHoursMessage: presetText,
+                              },
+                            })
+                          }
+                          className="px-2 py-1 bg-white hover:bg-rose-100/70 border border-slate-200 hover:border-rose-300 rounded-lg text-[10px] text-slate-700 font-medium transition text-left cursor-pointer"
+                        >
+                          &ldquo;{presetText}&rdquo;
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Live Preview Box */}
+                  <div className="p-3 bg-white/90 border border-rose-200 rounded-xl shadow-2xs space-y-1.5">
+                    <span className="text-[10px] font-black text-rose-700 uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-rose-500" />
+                      Pratinjau Tampilan Popup Siswa
+                    </span>
+                    <div className="p-2.5 bg-rose-50/70 border border-rose-200 rounded-lg text-center space-y-1">
+                      <span className="inline-block text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">
+                        Di Luar Jam Operasional
+                      </span>
+                      <p className="text-xs font-black text-slate-900 leading-snug">
+                        {formData.schedule.outOfHoursMessage ||
+                          'Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.'}
+                      </p>
+                      <p className="text-[10px] text-slate-500 italic">
+                        Menampilkan foto &amp; data siswa + jadwal resmi ({formData.schedule.morningStart} - {formData.schedule.morningCutoff} &amp; {formData.schedule.afternoonStart} - {formData.schedule.afternoonCutoff} WIB)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Automation Toggles */}
             <div className="space-y-2.5 pt-1 text-xs">
               <label className="flex items-center justify-between p-3 bg-slate-50 hover:bg-slate-100 rounded-xl border border-slate-200 cursor-pointer">
@@ -960,48 +1105,39 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             ))}
           </div>
 
-          {/* 5. GOOGLE DRIVE & CLOUD BACKUP BANNER */}
-          <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
-            <div className="flex items-center justify-between border-b border-blue-100 pb-3">
+          {/* 5. PUSAT CADANGAN & PEMULIHAN DATA MANUAL */}
+          <div className="bg-gradient-to-br from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
+            <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
               <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <CloudUpload className="w-4 h-4 text-emerald-600" />
-                Backup Otomatis Google Drive &amp; CSV
+                <Database className="w-4 h-4 text-emerald-600" />
+                Cadangan Data Manual &bull; 100% Bebas Eror
               </h4>
-              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-bold text-[10px]">
-                {formData.googleDriveBackup?.autoDailyBackup !== false ? 'Auto-Daily Aktif' : 'Manual'}
+              <span className="px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-extrabold text-[10px] border border-emerald-200">
+                1-Klik Download
               </span>
             </div>
 
             <p className="text-slate-600 text-[11px] leading-relaxed">
-              Data master siswa, catatan presensi apel/KBM, dan jurnal mengajar dapat dicadangkan secara otomatis setiap hari ke Google Drive folder resmi sekolah:
+              Amankan master siswa, catatan presensi apel/KBM, jurnal mengajar, dan master akun guru ke berkas cadangan mandiri (<strong>ZIP</strong>, <strong>JSON</strong>, atau <strong>Microsoft Excel .xlsx</strong>) langsung ke komputer tanpa perlu otorisasi cloud yang rentan eror.
             </p>
 
-            <div className="p-2.5 bg-white rounded-xl border border-blue-100 flex items-center justify-between gap-2">
+            <div className="p-3 bg-white/90 rounded-xl border border-emerald-200 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 truncate">
-                <FolderOpen className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="font-mono text-[11px] font-bold text-slate-700 truncate">
-                  Folder: {formData.googleDriveBackup?.folderId || '1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw'}
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="text-[11px] font-bold text-slate-700 truncate">
+                  Format Cadangan: ZIP, JSON Master, Excel (.xlsx) 4 Sheet
                 </span>
               </div>
-              <a
-                href={formData.googleDriveBackup?.folderUrl || 'https://drive.google.com/drive/u/0/folders/1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw'}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 shrink-0"
-              >
-                <span>Buka</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
             </div>
 
             {onNavigateToBackup && (
               <button
                 type="button"
                 onClick={onNavigateToBackup}
-                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
-                <CloudUpload className="w-4 h-4" />
-                <span>Buka Pusat Backup &amp; Ekspor Lengkap</span>
+                <Database className="w-4 h-4" />
+                <span>Buka Pusat Cadangan &amp; Restore Data Manual</span>
               </button>
             )}
           </div>

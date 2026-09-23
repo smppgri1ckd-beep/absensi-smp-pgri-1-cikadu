@@ -26,6 +26,8 @@ import {
   FolderDown,
   Sparkles,
   ShieldCheck,
+  Database,
+  HardDrive,
 } from 'lucide-react';
 import { ViewType, UserSession } from '../types';
 
@@ -163,9 +165,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         {
           id: 'backupData' as ViewType,
-          label: 'Backup Data & Google Drive',
-          shortLabel: 'Backup Cloud',
-          icon: <CloudUpload className="w-4 h-4 text-emerald-600" />,
+          label: 'Backup & Restore Data Manual',
+          shortLabel: 'Backup Data',
+          icon: <Database className="w-4 h-4 text-emerald-600" />,
         },
         {
           id: 'pengaturan' as ViewType,

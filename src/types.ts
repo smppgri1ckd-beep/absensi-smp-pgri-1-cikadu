@@ -50,6 +50,8 @@ export interface ScheduleConfig {
   afternoonCutoff: string;    // e.g. "17:00"
   autoSwitchSession: boolean;
   soundNotification: boolean;
+  restrictOutOfHours?: boolean; // Batasi/kunci absensi di luar jam operasional
+  outOfHoursMessage?: string;   // Pesan kustom saat scan di luar jam
 }
 
 export interface DutyTeacher {
@@ -81,7 +83,7 @@ export interface BackupHistoryItem {
   fileNames: string[];
   driveFolderId?: string;
   status: 'SUCCESS' | 'FAILED';
-  source: 'AUTO_DAILY' | 'MANUAL_DRIVE' | 'MANUAL_CSV' | 'MANUAL_JSON' | 'MANUAL_ZIP';
+  source: 'AUTO_DAILY' | 'MANUAL_DRIVE' | 'MANUAL_CSV' | 'MANUAL_JSON' | 'MANUAL_ZIP' | 'MANUAL_XLSX' | 'MANUAL';
   message?: string;
   driveWebLink?: string;
 }

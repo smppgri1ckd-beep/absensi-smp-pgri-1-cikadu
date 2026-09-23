@@ -137,6 +137,69 @@ export const KioskView: React.FC<KioskViewProps> = ({
     }, 250);
   };
 
+  // Check if current scan attempt is outside the configured schedule hours
+  const checkOutOfHours = (
+    session: AttendanceSession
+  ): { isOutOfHours: boolean; reason: string; allowableWindow: string } => {
+    // If restriction is explicitly set to false, allow scan anytime
+    if (config.schedule.restrictOutOfHours === false) {
+      return { isOutOfHours: false, reason: '', allowableWindow: '' };
+    }
+
+    const now = new Date();
+    const curMinutes = now.getHours() * 60 + now.getMinutes();
+
+    if (session === 'Pagi') {
+      const startStr = config.schedule.morningStart || '06:00';
+      const cutoffStr = config.schedule.morningCutoff || '11:30';
+      const [sh, sm] = startStr.split(':').map(Number);
+      const [ch, cm] = cutoffStr.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const cutoffMin = ch * 60 + cm;
+      const allowableWindow = `${startStr} - ${cutoffStr} WIB`;
+
+      if (curMinutes < startMin) {
+        return {
+          isOutOfHours: true,
+          reason: `Gerbang presensi Sesi Pagi baru dibuka pukul ${startStr} WIB.`,
+          allowableWindow,
+        };
+      }
+      if (curMinutes > cutoffMin) {
+        return {
+          isOutOfHours: true,
+          reason: `Batas akhir presensi Sesi Pagi telah ditutup pada pukul ${cutoffStr} WIB.`,
+          allowableWindow,
+        };
+      }
+    } else {
+      const startStr = config.schedule.afternoonStart || '13:45';
+      const cutoffStr = config.schedule.afternoonCutoff || '17:00';
+      const [sh, sm] = startStr.split(':').map(Number);
+      const [ch, cm] = cutoffStr.split(':').map(Number);
+      const startMin = sh * 60 + sm;
+      const cutoffMin = ch * 60 + cm;
+      const allowableWindow = `${startStr} - ${cutoffStr} WIB`;
+
+      if (curMinutes < startMin) {
+        return {
+          isOutOfHours: true,
+          reason: `Gerbang presensi Sesi Siang/Kepulangan baru dibuka pukul ${startStr} WIB.`,
+          allowableWindow,
+        };
+      }
+      if (curMinutes > cutoffMin) {
+        return {
+          isOutOfHours: true,
+          reason: `Batas akhir presensi Sesi Siang/Kepulangan telah ditutup pada pukul ${cutoffStr} WIB.`,
+          allowableWindow,
+        };
+      }
+    }
+
+    return { isOutOfHours: false, reason: '', allowableWindow: '' };
+  };
+
   // Compute attendance status based on configured times
   const computeStatus = (session: AttendanceSession): string => {
     const now = new Date();
@@ -179,6 +242,47 @@ export const KioskView: React.FC<KioskViewProps> = ({
     }
 
     const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+    // 1. Check out-of-hours restriction rule
+    const outOfHoursCheck = checkOutOfHours(activeSession);
+    if (outOfHoursCheck.isOutOfHours) {
+      playBeep('warning');
+      const customMsg =
+        config.schedule.outOfHoursMessage?.trim() ||
+        'Mohon maaf, sekarang bukan waktunya untuk melakukan absensi.';
+
+      setScannerStatus(`${customMsg} (Jadwal ${activeSession}: ${outOfHoursCheck.allowableWindow})`);
+      setFeedbackModalData({
+        isOpen: true,
+        type: 'out_of_hours',
+        student,
+        record: {
+          id: `OUT_OF_HOURS_${cleanNisn}_${today}_${activeSession}`,
+          tanggal: today,
+          waktu: time,
+          nisn: student.nisn,
+          nama: student.nama,
+          kelas: student.kelas,
+          sesi: activeSession,
+          status: 'Di Luar Jam Operasional',
+          kategori: 'APEL',
+        },
+        contextTitle: `Apel ${activeSession}`,
+        autoCloseSeconds: 5,
+        customMessage: customMsg,
+        outOfHoursDetails: {
+          reason: outOfHoursCheck.reason,
+          allowableWindow: outOfHoursCheck.allowableWindow,
+          currentScanTime: `${time} WIB`,
+        },
+      });
+      setTimeout(() => setScanCooldown(false), 3000);
+      return;
+    }
+
+    // 2. Check if already attended today
     const already = attendance.find(
       (a) =>
         a.nisn.trim() === cleanNisn &&
@@ -202,8 +306,6 @@ export const KioskView: React.FC<KioskViewProps> = ({
       return;
     }
 
-    const now = new Date();
-    const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
     const status = computeStatus(activeSession);
 
     const record: AttendanceRecord = {
