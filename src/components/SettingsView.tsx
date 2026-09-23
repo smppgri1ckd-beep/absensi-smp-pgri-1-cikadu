@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import {
   School,
@@ -14,6 +14,13 @@ import {
   CheckCircle2,
   AlertTriangle,
   Monitor,
+  CloudUpload,
+  FolderOpen,
+  ExternalLink,
+  User,
+  Camera,
+  ShieldCheck,
+  Phone,
 } from 'lucide-react';
 import { SchoolConfig, AttendanceRecord } from '../types';
 import { processImageFile } from '../utils/qr';
@@ -26,6 +33,7 @@ interface SettingsViewProps {
   onUpdateConfig: (newConfig: SchoolConfig) => Promise<void>;
   onCleanDuplicates: () => Promise<number>;
   onPurgeSemester: (year: number, semester: 'ganjil' | 'genap') => Promise<number>;
+  onNavigateToBackup?: () => void;
   onShowNotice: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
@@ -36,6 +44,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateConfig,
   onCleanDuplicates,
   onPurgeSemester,
+  onNavigateToBackup,
   onShowNotice,
   onShowConfirm,
 }) => {
@@ -43,6 +52,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [maintenanceYear, setMaintenanceYear] = useState<number>(new Date().getFullYear());
   const [maintenanceSem, setMaintenanceSem] = useState<'ganjil' | 'genap'>('ganjil');
   const [isSaving, setIsSaving] = useState(false);
+  const adminPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -54,6 +64,35 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         logoUrl: b64,
       }));
     }
+  };
+
+  const handleAdminPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onShowNotice('Memproses Foto', 'Mengoptimalkan foto profil admin...', 'info');
+      const b64 = await processImageFile(file, 360, 0.88);
+      setFormData((prev) => ({
+        ...prev,
+        adminFotoUrl: b64,
+        adminProfile: {
+          ...(prev.adminProfile || {
+            nama: 'Administrator Sekolah',
+            email: 'admin@smp-pgri-1-cikadu.sch.id',
+            jabatan: 'Operator Presensi',
+          }),
+          fotoUrl: b64,
+        },
+      }));
+      onShowNotice('Foto Berhasil Dipilih', 'Foto profil admin siap disimpan.', 'success');
+    }
+  };
+
+  const handleRemoveAdminPhoto = () => {
+    setFormData((prev) => ({
+      ...prev,
+      adminFotoUrl: '',
+      adminProfile: prev.adminProfile ? { ...prev.adminProfile, fotoUrl: '' } : undefined,
+    }));
   };
 
   const handleSaveAll = async (e: React.FormEvent) => {
@@ -519,6 +558,161 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
+          {/* 3.5. PROFIL & FOTO ADMINISTRATOR */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5 text-xs">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
+              Profil &amp; Foto Administrator (Admin Avatar)
+            </h4>
+
+            {/* Photo Uploader */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3.5">
+              <div className="relative group shrink-0">
+                <img
+                  src={
+                    formData.adminFotoUrl ||
+                    formData.adminProfile?.fotoUrl ||
+                    'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=250&q=80'
+                  }
+                  alt="Admin Avatar"
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-xs bg-slate-200"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=250&q=80';
+                  }}
+                />
+              </div>
+
+              <div className="flex-1 space-y-1.5">
+                <span className="font-extrabold text-slate-800 block text-xs">
+                  Foto Profil Admin
+                </span>
+                <p className="text-[10px] text-slate-500">
+                  Foto ini akan tampil di Navbar atas, Dashboard Admin, dan akun Administrator.
+                </p>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="file"
+                    ref={adminPhotoInputRef}
+                    accept="image/*"
+                    onChange={handleAdminPhotoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => adminPhotoInputRef.current?.click()}
+                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold flex items-center gap-1.5 transition cursor-pointer text-[11px]"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Upload Foto</span>
+                  </button>
+
+                  {(formData.adminFotoUrl || formData.adminProfile?.fotoUrl) && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAdminPhoto}
+                      className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg font-bold flex items-center gap-1 transition cursor-pointer text-[11px]"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Hapus</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-600 font-bold mb-1">
+                  Nama Administrator
+                </label>
+                <input
+                  type="text"
+                  value={formData.adminProfile?.nama || 'Administrator Sekolah'}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      adminProfile: {
+                        ...(formData.adminProfile || {}),
+                        nama: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden font-semibold"
+                  placeholder="Administrator Sekolah"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-bold mb-1">
+                  Jabatan / Peran Admin
+                </label>
+                <input
+                  type="text"
+                  value={formData.adminProfile?.jabatan || 'Kepala Tata Usaha / Operator Presensi'}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      adminProfile: {
+                        ...(formData.adminProfile || {}),
+                        nama: formData.adminProfile?.nama || 'Administrator Sekolah',
+                        jabatan: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden"
+                  placeholder="Operator Presensi / IT"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-slate-600 font-bold mb-1">
+                  Email Admin
+                </label>
+                <input
+                  type="email"
+                  value={formData.adminProfile?.email || 'admin@smp-pgri-1-cikadu.sch.id'}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      adminProfile: {
+                        ...(formData.adminProfile || {}),
+                        nama: formData.adminProfile?.nama || 'Administrator Sekolah',
+                        email: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-600 font-bold mb-1">
+                  No. WhatsApp Admin
+                </label>
+                <input
+                  type="text"
+                  value={formData.adminProfile?.noHp || formData.kontak}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      adminProfile: {
+                        ...(formData.adminProfile || {}),
+                        nama: formData.adminProfile?.nama || 'Administrator Sekolah',
+                        noHp: e.target.value,
+                      },
+                    })
+                  }
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-hidden font-mono"
+                  placeholder="081234567890"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* 4. DUTY TEACHER ROTATION SCHEDULE */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
@@ -568,7 +762,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             ))}
           </div>
 
-          {/* 5. DATABASE MAINTENANCE */}
+          {/* 5. GOOGLE DRIVE & CLOUD BACKUP BANNER */}
+          <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-emerald-50 border border-blue-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
+            <div className="flex items-center justify-between border-b border-blue-100 pb-3">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <CloudUpload className="w-4 h-4 text-emerald-600" />
+                Backup Otomatis Google Drive &amp; CSV
+              </h4>
+              <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-bold text-[10px]">
+                {formData.googleDriveBackup?.autoDailyBackup !== false ? 'Auto-Daily Aktif' : 'Manual'}
+              </span>
+            </div>
+
+            <p className="text-slate-600 text-[11px] leading-relaxed">
+              Data master siswa, catatan presensi apel/KBM, dan jurnal mengajar dapat dicadangkan secara otomatis setiap hari ke Google Drive folder resmi sekolah:
+            </p>
+
+            <div className="p-2.5 bg-white rounded-xl border border-blue-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 truncate">
+                <FolderOpen className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span className="font-mono text-[11px] font-bold text-slate-700 truncate">
+                  Folder: {formData.googleDriveBackup?.folderId || '1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw'}
+                </span>
+              </div>
+              <a
+                href={formData.googleDriveBackup?.folderUrl || 'https://drive.google.com/drive/u/0/folders/1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 shrink-0"
+              >
+                <span>Buka</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+
+            {onNavigateToBackup && (
+              <button
+                type="button"
+                onClick={onNavigateToBackup}
+                className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+              >
+                <CloudUpload className="w-4 h-4" />
+                <span>Buka Pusat Backup &amp; Ekspor Lengkap</span>
+              </button>
+            )}
+          </div>
+
+          {/* 6. DATABASE MAINTENANCE */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
             <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
               <Server className="w-4 h-4 text-rose-600" />

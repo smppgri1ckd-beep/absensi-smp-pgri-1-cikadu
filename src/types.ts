@@ -57,6 +57,57 @@ export interface DutyTeacher {
   nip: string;
 }
 
+export interface GoogleDriveBackupConfig {
+  enabled: boolean;
+  folderId: string; // "1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw"
+  folderUrl: string; // "https://drive.google.com/drive/u/0/folders/1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw"
+  autoDailyBackup: boolean;
+  lastBackupDate?: string; // YYYY-MM-DD
+  lastBackupTimestamp?: string; // ISO string
+  lastBackupStatus?: 'SUCCESS' | 'FAILED' | 'IDLE';
+  lastBackupMessage?: string;
+  clientId?: string;
+}
+
+export interface BackupHistoryItem {
+  id: string;
+  timestamp: string; // ISO string
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm:ss
+  totalStudents: number;
+  totalAttendance: number;
+  totalJournals: number;
+  totalTeachers: number;
+  fileNames: string[];
+  driveFolderId?: string;
+  status: 'SUCCESS' | 'FAILED';
+  source: 'AUTO_DAILY' | 'MANUAL_DRIVE' | 'MANUAL_CSV' | 'MANUAL_JSON' | 'MANUAL_ZIP';
+  message?: string;
+  driveWebLink?: string;
+}
+
+export interface FullBackupPayload {
+  version: string;
+  exportedAt: string;
+  schoolName: string;
+  npsn: string;
+  config: SchoolConfig;
+  students: Student[];
+  attendance: AttendanceRecord[];
+  journals: TeachingJournal[];
+  teachers: TeacherUser[];
+  kalenderHeb?: Record<string, boolean>;
+}
+
+export interface AdminProfile {
+  nama: string;
+  nip?: string;
+  email?: string;
+  noHp?: string;
+  fotoUrl?: string;
+  jabatan?: string;
+}
+
 export interface SchoolConfig {
   namaSekolah: string;
   npsn: string;
@@ -66,6 +117,8 @@ export interface SchoolConfig {
   namaKepsek: string;
   nipKepsek: string;
   logoUrl: string;
+  adminProfile?: AdminProfile;
+  adminFotoUrl?: string;
   sistemHariSekolah: string; // "5" | "6"
   welcomeScreen: {
     show: boolean;
@@ -81,6 +134,7 @@ export interface SchoolConfig {
     sabtu?: DutyTeacher;
   };
   schedule: ScheduleConfig;
+  googleDriveBackup?: GoogleDriveBackupConfig;
 }
 
 export interface TeacherUser {
@@ -125,7 +179,9 @@ export interface TeachingJournal {
 export interface UserSession {
   role: 'ADMIN' | 'GURU' | null;
   name: string | null;
+  avatarUrl?: string | null;
   teacherData?: TeacherUser | null;
+  adminData?: AdminProfile | null;
 }
 
 export type ViewType =
@@ -139,6 +195,7 @@ export type ViewType =
   | 'kalenderHeb'
   | 'rekapPdf'
   | 'pengaturan'
+  | 'backupData'
   | 'kelolaGuru'
   | 'portalGuru'
   | 'guruIzinAbsen';

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Scan } from 'lucide-react';
 import { Student, SchoolConfig } from '../types';
 import { PgriLogo } from './PgriLogo';
@@ -17,12 +17,27 @@ export const IdCardFront: React.FC<IdCardFrontProps> = ({
   paperSize,
 }) => {
   const isF4 = paperSize === 'F4';
+  const [imgError, setImgError] = useState<boolean>(false);
 
-  const hasValidPhoto =
-    Boolean(student.fotoUrl) &&
-    student.fotoUrl.trim() !== '' &&
-    !student.fotoUrl.includes('placehold.co') &&
-    !student.fotoUrl.includes('placeholder');
+  // Reset img error if student photo URL changes
+  useEffect(() => {
+    setImgError(false);
+  }, [student.fotoUrl]);
+
+  const isPlaceholderUrl = (url?: string) => {
+    if (!url) return true;
+    const trimmed = url.trim().toLowerCase();
+    return (
+      trimmed === '' ||
+      trimmed === '-' ||
+      trimmed === 'null' ||
+      trimmed === 'undefined' ||
+      trimmed.includes('placehold.co') ||
+      trimmed.includes('placeholder')
+    );
+  };
+
+  const hasValidPhoto = !isPlaceholderUrl(student.fotoUrl) && !imgError;
 
   const formattedGender =
     student.jk === 'L' ? 'Laki-laki' : student.jk === 'P' ? 'Perempuan' : student.jk;
@@ -101,12 +116,13 @@ export const IdCardFront: React.FC<IdCardFrontProps> = ({
       <div className="px-2 pt-0.5 flex items-center gap-1.5 shrink-0">
         {/* Student Photo (3x4 aspect ratio) */}
         <div
-          className="rounded-lg border-2 border-blue-500 overflow-hidden bg-slate-100 shrink-0 flex items-center justify-center shadow-2xs"
+          className="rounded-lg border-2 border-[#02509c] overflow-hidden bg-gradient-to-b from-blue-50 to-slate-100 shrink-0 flex items-center justify-center shadow-2xs relative"
           style={{
             width: isF4 ? '19mm' : '17mm',
             height: isF4 ? '25mm' : '22mm',
             minWidth: isF4 ? '19mm' : '17mm',
             minHeight: isF4 ? '25mm' : '22mm',
+            boxSizing: 'border-box',
           }}
         >
           {hasValidPhoto ? (
@@ -114,15 +130,18 @@ export const IdCardFront: React.FC<IdCardFrontProps> = ({
               src={student.fotoUrl}
               alt={student.nama}
               className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
+              onError={() => setImgError(true)}
             />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center bg-blue-50/60 text-blue-400 p-0.5 text-center">
-              <User className="w-4 h-4 text-blue-400" />
-              <span className="text-[4.5px] font-bold uppercase mt-0.5 text-blue-500">
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-b from-blue-50/90 via-sky-50 to-slate-100 text-blue-500 p-0.5 text-center select-none">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-blue-100/90 flex items-center justify-center mb-0.5 border border-blue-200/80 shadow-2xs">
+                <User className="w-3.5 h-3.5 text-blue-700" />
+              </div>
+              <span className="text-[5px] font-black uppercase text-blue-950 tracking-wider leading-tight">
                 Pas Foto
+              </span>
+              <span className="text-[4px] font-bold text-blue-600/80 leading-tight">
+                2 × 3 cm
               </span>
             </div>
           )}

@@ -8,6 +8,7 @@ import {
   AttendanceSession,
   TeacherUser,
   TeachingJournal,
+  AdminProfile,
 } from './types';
 import {
   db,
@@ -30,7 +31,6 @@ import {
 import { playBeep } from './utils/audio';
 
 import { Navbar } from './components/Navbar';
-import { Sidebar } from './components/Sidebar';
 import { KioskView } from './components/KioskView';
 import { AdminDashboard } from './components/AdminDashboard';
 import { StudentMasterView } from './components/StudentMasterView';
@@ -43,10 +43,19 @@ import { SettingsView } from './components/SettingsView';
 import { PublicRekapView } from './components/PublicRekapView';
 import { TeacherManageView } from './components/TeacherManageView';
 import { TeacherPortalView } from './components/TeacherPortalView';
+import { BackupDriveView } from './components/BackupDriveView';
+import { ProfileEditModal } from './components/ProfileEditModal';
+import { Sidebar, TeacherTabType } from './components/Sidebar';
 import { WelcomeModal } from './components/WelcomeModal';
 import { LoginModal } from './components/LoginModal';
 import { NoticeModal, ConfirmModal } from './components/NoticeModal';
 import { NotificationBanner } from './components/NotificationBanner';
+import {
+  getCachedDriveToken,
+  executeFullDriveBackup,
+  addBackupHistoryItem,
+  DEFAULT_DRIVE_FOLDER_ID,
+} from './utils/googleDriveBackup';
 
 export default function App() {
   const [students, setStudents] = useState<Student[]>(() => {
@@ -85,10 +94,29 @@ export default function App() {
   });
 
   const [currentView, setCurrentView] = useState<ViewType>('kiosk');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('epresensi_sidebar_collapsed') === 'true';
+  });
+  const [teacherActiveTab, setTeacherActiveTab] = useState<TeacherTabType>('DASHBOARD');
+
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('epresensi_sidebar_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const handleSelectTeacherTab = (tab: TeacherTabType) => {
+    setTeacherActiveTab(tab);
+    setCurrentView('portalGuru');
+  };
+
   const [showWelcome, setShowWelcome] = useState<boolean>(() => {
     return config.welcomeScreen.show !== false;
   });
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   // Notifications & Confirmations
   const [notice, setNotice] = useState<{
@@ -554,6 +582,30 @@ export default function App() {
       } catch (err) {
         console.warn('Firestore update teacher error:', err);
       }
+    }
+  };
+
+  const handleUpdateTeacherProfile = async (updatedTeacher: TeacherUser) => {
+    await handleUpdateTeacher(updatedTeacher);
+  };
+
+  const handleUpdateAdminProfile = async (adminProfile: AdminProfile) => {
+    const updatedConfig: SchoolConfig = {
+      ...config,
+      adminProfile,
+      adminFotoUrl: adminProfile.fotoUrl,
+    };
+    await handleUpdateConfig(updatedConfig);
+
+    if (userSession.role === 'ADMIN') {
+      const updatedSession: UserSession = {
+        ...userSession,
+        name: adminProfile.nama,
+        avatarUrl: adminProfile.fotoUrl || null,
+        adminData: adminProfile,
+      };
+      setUserSession(updatedSession);
+      localStorage.setItem('epresensi_user_session', JSON.stringify(updatedSession));
     }
   };
 
@@ -1068,6 +1120,163 @@ export default function App() {
     return targets.length;
   };
 
+  // Restore Complete Backup Archive into Database
+  const handleRestoreAllData = async (payload: any) => {
+    // 1. Update State
+    if (Array.isArray(payload.students)) setStudents(payload.students);
+    if (Array.isArray(payload.attendance)) setAttendance(payload.attendance);
+    if (Array.isArray(payload.journals)) setTeachingJournals(payload.journals);
+    if (Array.isArray(payload.teachers)) setTeachers(payload.teachers);
+    if (payload.kalenderHeb) setKalenderHebData(payload.kalenderHeb);
+    if (payload.config && payload.config.namaSekolah) setConfig(payload.config);
+
+    // 2. Persist to LocalStorage
+    localStorage.setItem('epresensi_local_students', JSON.stringify(payload.students || []));
+    localStorage.setItem('epresensi_local_attendance', JSON.stringify(payload.attendance || []));
+    localStorage.setItem('epresensi_local_journals', JSON.stringify(payload.journals || []));
+    localStorage.setItem('epresensi_local_teachers', JSON.stringify(payload.teachers || []));
+    if (payload.kalenderHeb) localStorage.setItem('epresensi_local_heb', JSON.stringify(payload.kalenderHeb));
+    if (payload.config) localStorage.setItem('epresensi_local_config', JSON.stringify(payload.config));
+
+    // 3. Persist to Firestore if available
+    const firestore = db;
+    if (firestore) {
+      try {
+        if (payload.config) {
+          await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), payload.config, { merge: true });
+        }
+        if (payload.kalenderHeb) {
+          await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: payload.kalenderHeb }, { merge: true });
+        }
+
+        // Write students chunked
+        if (Array.isArray(payload.students)) {
+          for (let i = 0; i < payload.students.length; i += 200) {
+            const chunk = payload.students.slice(i, i + 200);
+            const batch = writeBatch(firestore);
+            chunk.forEach((s: any) => batch.set(doc(firestore, 'siswa', s.nisn), s));
+            await batch.commit();
+          }
+        }
+
+        // Write attendance chunked
+        if (Array.isArray(payload.attendance)) {
+          for (let i = 0; i < payload.attendance.length; i += 200) {
+            const chunk = payload.attendance.slice(i, i + 200);
+            const batch = writeBatch(firestore);
+            chunk.forEach((a: any) => batch.set(doc(firestore, 'presensi', a.id), a));
+            await batch.commit();
+          }
+        }
+
+        // Write journals chunked
+        if (Array.isArray(payload.journals)) {
+          for (let i = 0; i < payload.journals.length; i += 200) {
+            const chunk = payload.journals.slice(i, i + 200);
+            const batch = writeBatch(firestore);
+            chunk.forEach((j: any) => batch.set(doc(firestore, 'jurnal_mengajar', j.id), j));
+            await batch.commit();
+          }
+        }
+
+        // Write teachers chunked
+        if (Array.isArray(payload.teachers)) {
+          for (let i = 0; i < payload.teachers.length; i += 200) {
+            const chunk = payload.teachers.slice(i, i + 200);
+            const batch = writeBatch(firestore);
+            chunk.forEach((t: any) => batch.set(doc(firestore, 'guru', t.id), t));
+            await batch.commit();
+          }
+        }
+      } catch (err) {
+        console.warn('Firestore restore sync partial fallback:', err);
+      }
+    }
+  };
+
+  // Daily Auto-Backup to Google Drive check
+  useEffect(() => {
+    const checkDailyBackup = async () => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const backupConfig = config.googleDriveBackup;
+
+      if (
+        backupConfig?.autoDailyBackup !== false &&
+        backupConfig?.lastBackupDate !== todayStr &&
+        students.length > 0
+      ) {
+        const token = getCachedDriveToken();
+        if (token) {
+          try {
+            console.log('[AutoBackup] Memulai pencadangan harian otomatis ke Google Drive...');
+            const fullPayload = {
+              version: '2.0',
+              exportedAt: new Date().toISOString(),
+              schoolName: config.namaSekolah || 'SMP PGRI 1 CIKADU',
+              npsn: config.npsn || '69919136',
+              config,
+              students,
+              attendance,
+              journals: teachingJournals,
+              teachers,
+              kalenderHeb: kalenderHebData,
+            };
+
+            const targetFolder = backupConfig?.folderId || DEFAULT_DRIVE_FOLDER_ID;
+            const res = await executeFullDriveBackup(token, targetFolder, fullPayload);
+
+            const updatedConfig: SchoolConfig = {
+              ...config,
+              googleDriveBackup: {
+                ...(config.googleDriveBackup || {
+                  enabled: true,
+                  folderId: targetFolder,
+                  folderUrl: `https://drive.google.com/drive/u/0/folders/${targetFolder}`,
+                  autoDailyBackup: true,
+                }),
+                lastBackupDate: todayStr,
+                lastBackupTimestamp: new Date().toISOString(),
+                lastBackupStatus: 'SUCCESS',
+                lastBackupMessage: `Backup harian otomatis sukses (${res.uploadedFiles.length} berkas).`,
+              },
+            };
+
+            await handleUpdateConfig(updatedConfig);
+
+            addBackupHistoryItem({
+              id: `auto-${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              date: todayStr,
+              time: new Date().toLocaleTimeString('id-ID'),
+              totalStudents: students.length,
+              totalAttendance: attendance.length,
+              totalJournals: teachingJournals.length,
+              totalTeachers: teachers.length,
+              fileNames: res.uploadedFiles.map((f) => f.fileName),
+              driveFolderId: targetFolder,
+              status: 'SUCCESS',
+              source: 'AUTO_DAILY',
+              message: 'Backup harian otomatis tersinkronisasi ke Google Drive',
+              driveWebLink: res.uploadedFiles[0]?.webViewLink,
+            });
+
+            console.log('[AutoBackup] Cadangan harian Google Drive berhasil disinkronkan.');
+          } catch (err) {
+            console.warn('[AutoBackup] Gagal menjalankan backup harian background:', err);
+          }
+        }
+      }
+    };
+
+    const timer = setTimeout(checkDailyBackup, 4000);
+    return () => clearTimeout(timer);
+  }, [
+    config.googleDriveBackup?.lastBackupDate,
+    config.googleDriveBackup?.autoDailyBackup,
+    students.length,
+    attendance.length,
+  ]);
+
   const handleToggleSessionManual = () => {
     const next = computedSession === 'Pagi' ? 'Siang' : 'Pagi';
     setManualSessionOverride(next);
@@ -1121,11 +1330,14 @@ export default function App() {
         currentView={currentView}
         onSelectView={handleSelectView}
         onOpenLogin={() => setIsLoginModalOpen(true)}
+        onEditProfile={() => setIsProfileModalOpen(true)}
         onLogout={handleLogout}
         onShowWelcome={() => setShowWelcome(false)}
         onToggleSessionManual={handleToggleSessionManual}
         canInstallPwa={Boolean(deferredPrompt)}
         onInstallPwa={handleInstallPwa}
+        isSidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={handleToggleSidebar}
       />
 
       {/* Main Body */}
@@ -1135,7 +1347,12 @@ export default function App() {
           <Sidebar
             currentView={currentView}
             userSession={userSession}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={handleToggleSidebar}
             onSelectView={handleSelectView}
+            teacherActiveTab={teacherActiveTab}
+            onSelectTeacherTab={handleSelectTeacherTab}
+            journalCount={teachingJournals.length}
             onLogout={handleLogout}
           />
         )}
@@ -1197,6 +1414,10 @@ export default function App() {
                 onDeleteAttendance={handleDeleteAttendance}
                 onSaveJournal={handleSaveTeachingJournal}
                 onDeleteJournal={handleDeleteTeachingJournal}
+                onUpdateTeacherProfile={handleUpdateTeacherProfile}
+                activeTab={teacherActiveTab}
+                onSelectTab={setTeacherActiveTab}
+                isIzinView={currentView === 'guruIzinAbsen'}
                 onShowNotice={showNotice}
                 onShowConfirm={showConfirm}
               />
@@ -1224,6 +1445,7 @@ export default function App() {
               config={config}
               totalHeb={totalHebCount}
               dayKey={currentDayKey}
+              onNavigateToBackup={() => setCurrentView('backupData')}
             />
           )}
 
@@ -1284,6 +1506,21 @@ export default function App() {
             />
           )}
 
+          {currentView === 'backupData' && userSession.role === 'ADMIN' && (
+            <BackupDriveView
+              config={config}
+              students={students}
+              attendance={attendance}
+              journals={teachingJournals}
+              teachers={teachers}
+              kalenderHebData={kalenderHebData}
+              onUpdateConfig={handleUpdateConfig}
+              onRestoreAllData={handleRestoreAllData}
+              onShowNotice={showNotice}
+              onShowConfirm={showConfirm}
+            />
+          )}
+
           {currentView === 'pengaturan' && userSession.role === 'ADMIN' && (
             <SettingsView
               config={config}
@@ -1291,6 +1528,7 @@ export default function App() {
               onUpdateConfig={handleUpdateConfig}
               onCleanDuplicates={handleCleanDuplicates}
               onPurgeSemester={handlePurgeSemester}
+              onNavigateToBackup={() => setCurrentView('backupData')}
               onShowNotice={showNotice}
               onShowConfirm={showConfirm}
             />
@@ -1307,6 +1545,20 @@ export default function App() {
             setShowWelcome(false);
             setCurrentView('pantauPublik');
           }}
+        />
+      )}
+
+      {/* Profile & Photo Edit Modal for Logged In User */}
+      {isProfileModalOpen && (
+        <ProfileEditModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          mode={userSession.role === 'GURU' ? 'TEACHER' : 'ADMIN'}
+          teacher={userSession.teacherData || teachers.find((t) => t.nama === userSession.name) || teachers[0]}
+          config={config}
+          onSaveTeacher={handleUpdateTeacherProfile}
+          onSaveAdmin={handleUpdateAdminProfile}
+          onShowNotice={showNotice}
         />
       )}
 

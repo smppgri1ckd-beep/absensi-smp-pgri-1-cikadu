@@ -12,6 +12,8 @@ import {
   Camera,
   Users,
   GraduationCap,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { SchoolConfig, UserSession, AttendanceSession, ViewType } from '../types';
 
@@ -29,6 +31,9 @@ interface NavbarProps {
   onToggleSessionManual: () => void;
   canInstallPwa: boolean;
   onInstallPwa: () => void;
+  onEditProfile?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -45,11 +50,41 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleSessionManual,
   canInstallPwa,
   onInstallPwa,
+  onEditProfile,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
 }) => {
+  const avatarUrl =
+    userSession.role === 'GURU'
+      ? userSession.teacherData?.fotoUrl
+      : config.adminProfile?.fotoUrl || config.adminFotoUrl || userSession.avatarUrl;
+
+  const fallbackAvatar =
+    userSession.role === 'GURU'
+      ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80'
+      : 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=150&q=80';
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 shadow-xs">
-      {/* School Brand */}
-      <div className="flex items-center gap-2.5 sm:gap-3">
+      {/* School Brand & Sidebar Toggle */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {(userSession.role === 'ADMIN' || userSession.role === 'GURU') && onToggleSidebar && (
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            title={isSidebarCollapsed ? 'Tampilkan Menu Samping' : 'Sembunyikan Menu Samping'}
+            className="p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:scale-95 transition cursor-pointer border border-slate-200/80 shadow-2xs flex items-center gap-1.5"
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeft className="w-4 h-4 text-blue-600" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4 text-slate-600" />
+            )}
+            <span className="text-[11px] font-bold hidden xl:inline text-slate-700">
+              {isSidebarCollapsed ? 'Menu' : 'Sembunyikan'}
+            </span>
+          </button>
+        )}
+
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white border border-slate-200 p-1 flex items-center justify-center shrink-0 shadow-xs">
           <img
             src={config.logoUrl}
@@ -159,31 +194,47 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         )}
 
-        {/* Auth / Role Indicator */}
+        {/* Auth / Role Indicator & Avatar Photo */}
         {userSession.role ? (
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <span
-              className={`px-2 sm:px-2.5 py-1 font-extrabold rounded-xl text-xs border flex items-center gap-1.5 ${
+            <button
+              type="button"
+              onClick={onEditProfile}
+              title={`Klik untuk edit profil & foto ${userSession.role === 'GURU' ? 'guru' : 'admin'}`}
+              className={`p-1 pl-1.5 pr-2.5 font-extrabold rounded-2xl text-xs border flex items-center gap-2 transition hover:opacity-90 active:scale-95 cursor-pointer shadow-2xs ${
                 userSession.role === 'GURU'
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-blue-50 text-blue-800 border-blue-200 hover:bg-blue-100'
               }`}
             >
-              {userSession.role === 'GURU' ? (
-                <GraduationCap className="w-3.5 h-3.5 text-emerald-600" />
-              ) : (
-                <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
-              )}
-              <span className="hidden sm:inline">
-                {userSession.role === 'GURU'
-                  ? `Guru: ${userSession.teacherData?.nama?.split(',')[0] || userSession.name}`
-                  : userSession.role}
-              </span>
-            </span>
+              <div className="relative">
+                <img
+                  src={avatarUrl || fallbackAvatar}
+                  alt="Avatar"
+                  className="w-6 h-6 rounded-xl object-cover border border-white shadow-2xs"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = fallbackAvatar;
+                  }}
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white"></span>
+              </div>
+
+              <div className="text-left leading-tight hidden sm:block">
+                <span className="text-[11px] font-black block truncate max-w-[120px]">
+                  {userSession.role === 'GURU'
+                    ? (userSession.teacherData?.nama?.split(',')[0] || userSession.name)
+                    : (config.adminProfile?.nama?.split(' ')[0] || 'Admin')}
+                </span>
+                <span className="text-[9px] font-semibold text-slate-500 block uppercase tracking-wider">
+                  {userSession.role === 'GURU' ? 'Profil Guru' : 'Profil Admin'}
+                </span>
+              </div>
+            </button>
+
             <button
               type="button"
               onClick={onLogout}
-              className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg text-xs font-bold transition hover:bg-rose-50 cursor-pointer"
+              className="p-2 text-slate-400 hover:text-rose-600 rounded-xl text-xs font-bold transition hover:bg-rose-50 cursor-pointer"
               title="Keluar Akun"
             >
               <LogOut className="w-4 h-4" />

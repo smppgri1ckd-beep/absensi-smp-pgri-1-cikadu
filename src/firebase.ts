@@ -86,6 +86,16 @@ export const DEFAULT_SCHOOL_CONFIG: SchoolConfig = {
     autoSwitchSession: true,
     soundNotification: true,
   },
+  googleDriveBackup: {
+    enabled: true,
+    folderId: "1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw",
+    folderUrl: "https://drive.google.com/drive/u/0/folders/1eIy2U9w6Sts0GQP2LBKr1s_M8MARxFFw",
+    autoDailyBackup: true,
+    lastBackupDate: "",
+    lastBackupTimestamp: "",
+    lastBackupStatus: "IDLE",
+    lastBackupMessage: "Siap untuk sinkronisasi harian ke Google Drive",
+  },
 };
 
 // Initial starter students for demo / instant experience if cloud collection is empty

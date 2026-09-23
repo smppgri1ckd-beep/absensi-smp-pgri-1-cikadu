@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   User,
   GraduationCap,
@@ -35,6 +35,8 @@ import {
   FileCheck2,
   ListOrdered,
   CalendarRange,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
 import {
   Student,
@@ -49,10 +51,13 @@ import {
 import { OFFICIAL_SUBJECTS } from '../constants/subjects';
 import { StudentDetailModal } from './StudentDetailModal';
 import { TeacherQRScannerModal } from './TeacherQRScannerModal';
+import { LearningSummaryDashboard } from './LearningSummaryDashboard';
+import { ProfileEditModal } from './ProfileEditModal';
 import {
   exportTeacherDailyPDF,
   exportTeacherJournalBookPDF,
   exportTeacherAttendanceMatrixPDF,
+  JournalExportFilterOptions,
 } from '../utils/teacherExportPdf';
 
 interface TeacherPortalViewProps {
@@ -69,6 +74,10 @@ interface TeacherPortalViewProps {
   onDeleteAttendance?: (id: string) => Promise<void>;
   onSaveJournal?: (journal: TeachingJournal, attendanceBatch?: AttendanceRecord[]) => Promise<void>;
   onDeleteJournal?: (id: string) => Promise<void>;
+  onUpdateTeacherProfile?: (updatedTeacher: TeacherUser) => Promise<void>;
+  activeTab?: 'DASHBOARD' | 'PRESENSI' | 'JURNAL' | 'LAPORAN_PDF' | 'SISWA' | 'PIKET';
+  onSelectTab?: (tab: 'DASHBOARD' | 'PRESENSI' | 'JURNAL' | 'LAPORAN_PDF' | 'SISWA' | 'PIKET') => void;
+  isIzinView?: boolean;
   onShowNotice: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
 }
@@ -87,6 +96,10 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
   onDeleteAttendance,
   onSaveJournal,
   onDeleteJournal,
+  onUpdateTeacherProfile,
+  activeTab: propActiveTab,
+  onSelectTab,
+  isIzinView = false,
   onShowNotice,
   onShowConfirm,
 }) => {
@@ -118,7 +131,14 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
     return new Date().toISOString().split('T')[0];
   });
   const [selectedSession, setSelectedSession] = useState<AttendanceSession>(activeSession);
-  const [activeTab, setActiveTab] = useState<'PRESENSI' | 'JURNAL' | 'LAPORAN_PDF' | 'SISWA' | 'PIKET'>('PRESENSI');
+  const [internalActiveTab, setInternalActiveTab] = useState<'DASHBOARD' | 'PRESENSI' | 'JURNAL' | 'LAPORAN_PDF' | 'SISWA' | 'PIKET'>('DASHBOARD');
+  const activeTab = propActiveTab || internalActiveTab;
+  const setActiveTab = (tab: 'DASHBOARD' | 'PRESENSI' | 'JURNAL' | 'LAPORAN_PDF' | 'SISWA' | 'PIKET') => {
+    setInternalActiveTab(tab);
+    if (onSelectTab) {
+      onSelectTab(tab);
+    }
+  };
   const [searchQuery, setSearchQuery] = useState('');
 
   // Dual-Function: APEL (Pagi/Siang) vs KELAS (KBM Mengajar)
@@ -132,13 +152,21 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
   const [isSavingJournal, setIsSavingJournal] = useState(false);
 
   // Modal Input Izin / Sakit
-  const [showIzinModal, setShowIzinModal] = useState(false);
+  const [showIzinModal, setShowIzinModal] = useState(isIzinView);
   const [targetStudent, setTargetStudent] = useState<Student | null>(null);
   const [izinStatus, setIzinStatus] = useState<'Izin' | 'Sakit' | 'Alpa' | 'Hadir Tepat Waktu'>('Izin');
   const [izinKeterangan, setIzinKeterangan] = useState('');
 
+  useEffect(() => {
+    if (isIzinView) {
+      setShowIzinModal(true);
+      setActiveTab('PRESENSI');
+    }
+  }, [isIzinView]);
+
   // Modal Edit Presensi Manual / Koreksi
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [editStatus, setEditStatus] = useState<string>('Hadir Tepat Waktu');
@@ -165,13 +193,91 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
 
   // PDF Download Hub Modal / Form States
   const [showPdfHubModal, setShowPdfHubModal] = useState(false);
-  const [pdfReportType, setPdfReportType] = useState<'PERTEMUAN' | 'TANGGAL' | 'BUKU_AGENDA' | 'MATRIKS'>('PERTEMUAN');
+  const [pdfReportType, setPdfReportType] = useState<'REKAP_JURNAL' | 'PERTEMUAN' | 'TANGGAL' | 'BUKU_AGENDA' | 'MATRIKS'>('REKAP_JURNAL');
   const [pdfSelectedClass, setPdfSelectedClass] = useState<string>(initialClass);
   const [pdfSelectedMapel, setPdfSelectedMapel] = useState<string>(teacherMapelList[0] || OFFICIAL_SUBJECTS[0]);
   const [pdfPertemuanKe, setPdfPertemuanKe] = useState<number>(1);
   const [pdfStartDate, setPdfStartDate] = useState<string>(selectedDate);
   const [pdfEndDate, setPdfEndDate] = useState<string>(selectedDate);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  // Dedicated Journal PDF Filter Modal States
+  const [showJournalExportModal, setShowJournalExportModal] = useState(false);
+  const [jExpClass, setJExpClass] = useState<string>('ALL');
+  const [jExpMapel, setJExpMapel] = useState<string>(teacherMapelList[0] || OFFICIAL_SUBJECTS[0]);
+  const [jExpDateMode, setJExpDateMode] = useState<'ALL' | 'SINGLE' | 'RANGE'>('ALL');
+  const [jExpStartDate, setJExpStartDate] = useState<string>(selectedDate);
+  const [jExpEndDate, setJExpEndDate] = useState<string>(selectedDate);
+  const [jExpPertemuanMode, setJExpPertemuanMode] = useState<'ALL' | 'SINGLE' | 'RANGE'>('ALL');
+  const [jExpPertemuanSingle, setJExpPertemuanSingle] = useState<number>(1);
+  const [jExpPertemuanFrom, setJExpPertemuanFrom] = useState<number>(1);
+  const [jExpPertemuanTo, setJExpPertemuanTo] = useState<number>(16);
+  const [jExpMateriMode, setJExpMateriMode] = useState<'ALL' | 'KEYWORD' | 'SELECT'>('ALL');
+  const [jExpMateriKeyword, setJExpMateriKeyword] = useState<string>('');
+  const [jExpSelectedMateri, setJExpSelectedMateri] = useState<string>('');
+
+  // Handlers for Dashboard Drilldown Actions
+  const handleOpenSessionInPresensi = (
+    kelas: string,
+    mapel: string,
+    tanggal: string,
+    pertemuan: number,
+    materi?: string
+  ) => {
+    setSelectedClass(kelas);
+    setSelectedMapel(mapel);
+    setSelectedDate(tanggal);
+    setPertemuanKe(pertemuan);
+    if (materi) setMateriPokok(materi);
+    setAttendanceCategory('KELAS');
+    setActiveTab('PRESENSI');
+    onShowNotice(
+      'Sesi Pembelajaran Dimuat',
+      `Membuka sesi KBM Kelas ${kelas} • ${mapel} (Pertemuan Ke-${pertemuan}) pada ${tanggal}`,
+      'info'
+    );
+  };
+
+  const handleDownloadMeetingPdf = async (
+    kelas: string,
+    mapel: string,
+    pertemuan: number,
+    tanggal: string,
+    materi?: string,
+    jam?: string,
+    kegiatan?: string,
+    catatan?: string
+  ) => {
+    try {
+      const classStudentsList = students.filter((s) => s.kelas === kelas);
+      await exportTeacherDailyPDF(
+        config,
+        teacher,
+        kelas,
+        'Pagi',
+        tanggal,
+        classStudentsList,
+        attendance,
+        {
+          kategori: 'KELAS',
+          mapel,
+          pertemuanKe: pertemuan,
+          materiPokok: materi,
+          jamPelajaran: jam,
+          kegiatanPembelajaran: kegiatan,
+          catatanRefleksi: catatan,
+        }
+      );
+      onShowNotice(
+        'Laporan Berhasil Diunduh',
+        `PDF Pembelajaran Pertemuan Ke-${pertemuan} (${mapel} - ${kelas}) telah disimpan.`,
+        'success'
+      );
+    } catch (err) {
+      console.error('Failed to export meeting PDF:', err);
+      onShowNotice('Gagal Unduh PDF', 'Terjadi kesalahan saat membuat file PDF.', 'warning');
+    }
+  };
 
   const handleOpenStudentDetail = (s: Student) => {
     setSelectedDetailStudent(s);
@@ -278,6 +384,80 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
       return true;
     });
   }, [journals, teacher.id, teacher.nama, journalFilterClass, journalFilterMapel, journalSearchQuery]);
+
+  // Teacher's distinct material topics for quick-selection
+  const distinctMaterials = useMemo(() => {
+    const set = new Set<string>();
+    journals.forEach((j) => {
+      const isOwner = j.guruId === teacher.id || j.guruNama === teacher.nama || teacher.id === 'admin-guru';
+      if (isOwner && j.materiPokok && j.materiPokok.trim()) {
+        set.add(j.materiPokok.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'id'));
+  }, [journals, teacher.id, teacher.nama]);
+
+  // Matching journals preview for PDF export based on active export filter parameters
+  const matchingExportJournals = useMemo(() => {
+    return journals.filter((j) => {
+      const isOwner = j.guruId === teacher.id || j.guruNama === teacher.nama || teacher.id === 'admin-guru';
+      if (!isOwner) return false;
+
+      // Class filter
+      if (jExpClass !== 'ALL' && j.kelas !== jExpClass) return false;
+
+      // Mapel filter
+      if (jExpMapel !== 'ALL' && j.mapel.trim().toLowerCase() !== jExpMapel.trim().toLowerCase()) return false;
+
+      // Date filter
+      if (jExpDateMode === 'SINGLE' && jExpStartDate) {
+        if (j.tanggal !== jExpStartDate) return false;
+      } else if (jExpDateMode === 'RANGE') {
+        if (jExpStartDate && j.tanggal < jExpStartDate) return false;
+        if (jExpEndDate && j.tanggal > jExpEndDate) return false;
+      }
+
+      // Pertemuan filter
+      if (jExpPertemuanMode === 'SINGLE') {
+        if (j.pertemuanKe !== jExpPertemuanSingle) return false;
+      } else if (jExpPertemuanMode === 'RANGE') {
+        if (jExpPertemuanFrom && j.pertemuanKe < jExpPertemuanFrom) return false;
+        if (jExpPertemuanTo && j.pertemuanKe > jExpPertemuanTo) return false;
+      }
+
+      // Materi filter
+      if (jExpMateriMode === 'KEYWORD' && jExpMateriKeyword.trim()) {
+        const q = jExpMateriKeyword.trim().toLowerCase();
+        const matchMateri = (j.materiPokok || '').toLowerCase().includes(q);
+        const matchKegiatan = (j.kegiatanPembelajaran || '').toLowerCase().includes(q);
+        const matchCatatan = (j.catatanRefleksi || '').toLowerCase().includes(q);
+        if (!matchMateri && !matchKegiatan && !matchCatatan) return false;
+      } else if (jExpMateriMode === 'SELECT' && jExpSelectedMateri) {
+        if (j.materiPokok !== jExpSelectedMateri) return false;
+      }
+
+      return true;
+    }).sort((a, b) => {
+      if (a.pertemuanKe !== b.pertemuanKe) return a.pertemuanKe - b.pertemuanKe;
+      return a.tanggal.localeCompare(b.tanggal);
+    });
+  }, [
+    journals,
+    teacher.id,
+    teacher.nama,
+    jExpClass,
+    jExpMapel,
+    jExpDateMode,
+    jExpStartDate,
+    jExpEndDate,
+    jExpPertemuanMode,
+    jExpPertemuanSingle,
+    jExpPertemuanFrom,
+    jExpPertemuanTo,
+    jExpMateriMode,
+    jExpMateriKeyword,
+    jExpSelectedMateri,
+  ]);
 
   // Suggest next meeting number when class / mapel changes
   const suggestedNextMeeting = useMemo(() => {
@@ -560,6 +740,140 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
     );
   };
 
+  // Open Journal PDF Export Modal with prefilled parameters
+  const handleOpenJournalExportModal = (options?: {
+    kelas?: string;
+    mapel?: string;
+    materi?: string;
+    pertemuan?: number;
+    startDate?: string;
+    endDate?: string;
+  }) => {
+    setJExpClass(options?.kelas || journalFilterClass || 'ALL');
+    setJExpMapel(options?.mapel || (journalFilterMapel !== 'ALL' ? journalFilterMapel : teacherMapelList[0] || OFFICIAL_SUBJECTS[0]));
+    
+    if (options?.startDate || options?.endDate) {
+      setJExpDateMode(options.startDate && options.endDate && options.startDate !== options.endDate ? 'RANGE' : 'SINGLE');
+      setJExpStartDate(options.startDate || selectedDate);
+      setJExpEndDate(options.endDate || selectedDate);
+    } else {
+      setJExpDateMode('ALL');
+    }
+
+    if (options?.pertemuan) {
+      setJExpPertemuanMode('SINGLE');
+      setJExpPertemuanSingle(options.pertemuan);
+    } else {
+      setJExpPertemuanMode('ALL');
+    }
+
+    if (options?.materi) {
+      setJExpMateriMode('KEYWORD');
+      setJExpMateriKeyword(options.materi);
+    } else if (journalSearchQuery) {
+      setJExpMateriMode('KEYWORD');
+      setJExpMateriKeyword(journalSearchQuery);
+    } else {
+      setJExpMateriMode('ALL');
+      setJExpMateriKeyword('');
+      setJExpSelectedMateri('');
+    }
+
+    setShowJournalExportModal(true);
+  };
+
+  // Export the current journal table view directly
+  const handleExportCurrentJournalView = async () => {
+    if (teacherJournals.length === 0) {
+      onShowNotice(
+        'Tidak Ada Data Jurnal',
+        'Tidak ada sesi jurnal yang cocok dengan filter tabel aktif untuk dicetak.',
+        'warning'
+      );
+      return;
+    }
+
+    setIsExportingPdf(true);
+    try {
+      const filterOptions: JournalExportFilterOptions = {
+        materiKeyword: journalSearchQuery || undefined,
+        customSubtitle: `[ Tampilan Tabel: Kelas ${journalFilterClass} | Mapel ${journalFilterMapel} ${journalSearchQuery ? `| Pencarian: "${journalSearchQuery}"` : ''} ]`,
+      };
+
+      await exportTeacherJournalBookPDF(
+        config,
+        teacher,
+        journalFilterClass,
+        journalFilterMapel === 'ALL' ? (teacher.mapel || 'Semua Mapel') : journalFilterMapel,
+        teacherJournals,
+        filterOptions
+      );
+
+      onShowNotice(
+        'Laporan Berhasil Diunduh',
+        `PDF Rekap Jurnal Pembelajaran (${teacherJournals.length} sesi) berhasil disimpan.`,
+        'success'
+      );
+    } catch (err) {
+      console.error('Failed to export current journal view:', err);
+      onShowNotice('Gagal Unduh PDF', 'Terjadi kesalahan saat memproses file PDF.', 'warning');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
+  // Execute filtered Journal PDF export from dedicated modal
+  const handleExecuteJournalPdfExport = async () => {
+    if (matchingExportJournals.length === 0) {
+      onShowNotice(
+        'Tidak Ada Data Cocok',
+        'Tidak ditemukan sesi jurnal yang sesuai dengan kriteria filter yang dipilih. Silakan sesuaikan filter Anda.',
+        'warning'
+      );
+      return;
+    }
+
+    setIsExportingPdf(true);
+    try {
+      const filterOptions: JournalExportFilterOptions = {
+        dateMode: jExpDateMode,
+        startDate: jExpStartDate,
+        endDate: jExpEndDate,
+        pertemuanMode: jExpPertemuanMode,
+        singlePertemuan: jExpPertemuanSingle,
+        pertemuanFrom: jExpPertemuanFrom,
+        pertemuanTo: jExpPertemuanTo,
+        materiKeyword:
+          jExpMateriMode === 'KEYWORD'
+            ? jExpMateriKeyword.trim() || undefined
+            : jExpMateriMode === 'SELECT'
+            ? jExpSelectedMateri || undefined
+            : undefined,
+      };
+
+      await exportTeacherJournalBookPDF(
+        config,
+        teacher,
+        jExpClass,
+        jExpMapel === 'ALL' ? (teacher.mapel || 'Semua Mapel') : jExpMapel,
+        matchingExportJournals,
+        filterOptions
+      );
+
+      setShowJournalExportModal(false);
+      onShowNotice(
+        'PDF Berhasil Diunduh',
+        `Rekap Jurnal Pembelajaran (${matchingExportJournals.length} sesi) berhasil diunduh.`,
+        'success'
+      );
+    } catch (err) {
+      console.error('Failed to export journal PDF:', err);
+      onShowNotice('Gagal Unduh PDF', 'Terjadi kesalahan saat memproses file PDF.', 'warning');
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
+
   // Export Teacher Journal Book
   const handleExportJournalBook = async () => {
     const targetClass = pdfSelectedClass;
@@ -619,7 +933,17 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
   const handleDownloadFromHub = async () => {
     setIsExportingPdf(true);
     try {
-      if (pdfReportType === 'PERTEMUAN') {
+      if (pdfReportType === 'REKAP_JURNAL') {
+        handleOpenJournalExportModal({
+          kelas: pdfSelectedClass,
+          mapel: pdfSelectedMapel,
+          startDate: pdfStartDate,
+          endDate: pdfEndDate,
+          pertemuan: pdfPertemuanKe,
+        });
+        setShowPdfHubModal(false);
+        return;
+      } else if (pdfReportType === 'PERTEMUAN') {
         const classSiswa = students.filter((s) => s.kelas === pdfSelectedClass);
         const jrn = journals.find(
           (j) =>
@@ -811,7 +1135,7 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
 
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
-            <div className="relative group">
+            <div className="relative group shrink-0">
               <img
                 src={
                   teacher.fotoUrl ||
@@ -824,9 +1148,14 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                     'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=250&q=80';
                 }}
               />
-              <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-1 border-2 border-blue-950">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                title="Ganti Foto Profil Guru"
+                className="absolute -bottom-1 -right-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full p-1.5 border-2 border-blue-950 shadow-sm transition active:scale-90 cursor-pointer"
+              >
+                <Camera className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             <div className="space-y-1">
@@ -853,7 +1182,20 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
           <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
             <button
               type="button"
-              onClick={() => setShowPdfHubModal(true)}
+              onClick={() => setShowProfileModal(true)}
+              className="px-3.5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-2xl text-xs font-bold backdrop-blur-md transition-all flex items-center gap-2 cursor-pointer shadow-xs hover:border-emerald-400"
+            >
+              <User className="w-4 h-4 text-emerald-300" />
+              <span>Edit Profil &amp; Foto</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setPdfSelectedClass(selectedClass);
+                setPdfSelectedMapel(selectedMapel);
+                setShowPdfHubModal(true);
+              }}
               className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-black transition-all flex items-center gap-2 shadow-lg hover:shadow-emerald-900/30 cursor-pointer"
             >
               <FileDown className="w-4 h-4" />
@@ -872,76 +1214,20 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
         </div>
       </div>
 
-      {/* ===== NAVIGATION TABS ===== */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('PRESENSI')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'PRESENSI'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          <span>Presensi Siswa</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('JURNAL')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'JURNAL'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <BookOpen className="w-4 h-4" />
-          <span>Data Pembelajaran & Jurnal</span>
-          <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-blue-100 text-blue-800 font-extrabold ml-1">
-            {teacherJournals.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setPdfSelectedClass(selectedClass);
-            setPdfSelectedMapel(selectedMapel);
-            setShowPdfHubModal(true);
-          }}
-          className="px-4 py-2.5 rounded-2xl text-xs font-black bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-300 transition-all flex items-center gap-2 cursor-pointer shadow-2xs"
-        >
-          <FileText className="w-4 h-4 text-emerald-600" />
-          <span>Download Laporan PDF</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('SISWA')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'SISWA'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          <span>Direktori Siswa</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('PIKET')}
-          className={`px-4 py-2.5 rounded-2xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer ${
-            activeTab === 'PIKET'
-              ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-              : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
-          }`}
-        >
-          <Clock className="w-4 h-4" />
-          <span>Info Piket & Jadwal</span>
-        </button>
-      </div>
+      {/* ===== TAB 0: DASHBOARD RINGKASAN PEMBELAJARAN & GRAFIK TREN ===== */}
+      {activeTab === 'DASHBOARD' && (
+        <LearningSummaryDashboard
+          teacher={teacher}
+          students={students}
+          journals={journals}
+          attendance={attendance}
+          classes={classes}
+          teacherMapelList={teacherMapelList}
+          config={config}
+          onOpenSessionInPresensi={handleOpenSessionInPresensi}
+          onDownloadMeetingPdf={handleDownloadMeetingPdf}
+        />
+      )}
 
       {/* ===== TAB 1: PRESENSI SISWA & SESI AKTIF KBM ===== */}
       {activeTab === 'PRESENSI' && (
@@ -1315,12 +1601,26 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
-                  onClick={handleExportJournalBook}
-                  className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  onClick={() => handleOpenJournalExportModal()}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Buka filter lanjutan untuk mengunduh rekap jurnal pembelajaran"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Cetak Buku Jurnal Guru</span>
+                  <FileDown className="w-3.5 h-3.5" />
+                  <span>Ekspor Rekap Jurnal (PDF)</span>
                 </button>
+
+                {journalSearchQuery || journalFilterClass !== 'ALL' || journalFilterMapel !== 'ALL' ? (
+                  <button
+                    type="button"
+                    onClick={handleExportCurrentJournalView}
+                    disabled={isExportingPdf || teacherJournals.length === 0}
+                    className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    title="Unduh langsung data yang saat ini tampil di tabel"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Cetak Sesuai Filter Tabel ({teacherJournals.length})</span>
+                  </button>
+                ) : null}
               </div>
             </div>
 
@@ -1643,10 +1943,160 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
         </div>
       )}
 
+      {/* ===== TAB 5: DOWNLOAD LAPORAN PDF KBM ===== */}
+      {activeTab === 'LAPORAN_PDF' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-xs shrink-0">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Pusat Unduh Laporan PDF & Agenda Mengajar
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Ekspor rekapitulasi KBM, lembar presensi resmi A4, buku agenda, dan matriks kehadiran siswa.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowJournalExportModal(true)}
+                className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl text-xs font-extrabold transition flex items-center gap-2 shadow-xs shrink-0 cursor-pointer"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Filter Ekspor Jurnal Lengkap</span>
+              </button>
+            </div>
+
+            {/* Report Type Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              <div
+                onClick={() => {
+                  setPdfReportType('REKAP_JURNAL');
+                  setShowJournalExportModal(true);
+                }}
+                className="p-4 rounded-2xl border-2 border-emerald-500/80 bg-emerald-50/40 hover:bg-emerald-50 transition cursor-pointer space-y-1.5 group"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-black text-emerald-900 text-sm flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-emerald-600" />
+                    Rekap Jurnal & Agenda Mengajar (PDF)
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-200 text-emerald-800 font-extrabold">
+                    Rekomendasi
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800 leading-relaxed">
+                  Format resmi buku agenda guru memuat nomor pertemuan, materi pokok, catatan refleksi, dan rincian kehadiran siswa.
+                </p>
+              </div>
+
+              <div
+                onClick={() => {
+                  setPdfReportType('PERTEMUAN');
+                  setShowPdfHubModal(true);
+                }}
+                className="p-4 rounded-2xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/30 transition cursor-pointer space-y-1.5"
+              >
+                <span className="font-black text-slate-900 text-sm flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                  Presensi Per Pertemuan Spesifik
+                </span>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Cetak lembar presensi untuk satu nomor pertemuan tatap muka tertentu (misal Pertemuan Ke-1, 2, dst).
+                </p>
+              </div>
+
+              <div
+                onClick={() => {
+                  setPdfReportType('TANGGAL');
+                  setShowPdfHubModal(true);
+                }}
+                className="p-4 rounded-2xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/30 transition cursor-pointer space-y-1.5"
+              >
+                <span className="font-black text-slate-900 text-sm flex items-center gap-2">
+                  <CalendarRange className="w-4 h-4 text-purple-600" />
+                  Presensi Harian / Tanggal Tertentu
+                </span>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Cetak lembar absensi siswa pada tanggal pelaksanaan kegiatan belajar mengajar tertentu.
+                </p>
+              </div>
+
+              <div
+                onClick={() => {
+                  setPdfReportType('BUKU_AGENDA');
+                  setShowPdfHubModal(true);
+                }}
+                className="p-4 rounded-2xl border border-slate-200 hover:border-blue-400 bg-white hover:bg-blue-50/30 transition cursor-pointer space-y-1.5"
+              >
+                <span className="font-black text-slate-900 text-sm flex items-center gap-2">
+                  <FileSpreadsheet className="w-4 h-4 text-amber-600" />
+                  Buku Agenda & Rekapitulasi Rombel
+                </span>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Cetak buku agenda mengajar lengkap 1 semester beserta ringkasan jam dan materi pokok.
+                </p>
+              </div>
+            </div>
+
+            {/* Quick Export Controls */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
+              <h4 className="text-xs font-black text-slate-800">Pilih Parameter Cepat Unduh:</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Kelas</label>
+                  <select
+                    value={pdfSelectedClass}
+                    onChange={(e) => setPdfSelectedClass(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
+                  >
+                    {classes.map((c) => (
+                      <option key={c} value={c}>Kelas {c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-600 mb-1">Mata Pelajaran</label>
+                  <select
+                    value={pdfSelectedMapel}
+                    onChange={(e) => setPdfSelectedMapel(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 truncate"
+                  >
+                    {teacherMapelList.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                    {OFFICIAL_SUBJECTS.filter((s) => !teacherMapelList.includes(s)).map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => setShowJournalExportModal(true)}
+                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Buka Filter & Unduh</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL PUSAT DOWNLOAD LAPORAN PDF FLEKSIBEL ===== */}
       {showPdfHubModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150 space-y-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150 space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-9 h-9 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
@@ -1674,6 +2124,24 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
             <div className="grid grid-cols-2 gap-2 text-xs">
               <button
                 type="button"
+                onClick={() => setPdfReportType('REKAP_JURNAL')}
+                className={`p-3 rounded-2xl border font-bold text-left transition cursor-pointer space-y-1 ${
+                  pdfReportType === 'REKAP_JURNAL'
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-900 shadow-2xs'
+                    : 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-xs font-black">Rekap Jurnal Terfilter</span>
+                </div>
+                <p className="text-[10px] text-slate-500 font-normal">
+                  Filter tanggal, materi, atau pertemuan tertentu
+                </p>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setPdfReportType('PERTEMUAN')}
                 className={`p-3 rounded-2xl border font-bold text-left transition cursor-pointer space-y-1 ${
                   pdfReportType === 'PERTEMUAN'
@@ -1687,24 +2155,6 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                 </div>
                 <p className="text-[10px] text-slate-500 font-normal">
                   Detail 1 pertemuan + daftar presensi siswa lengkap
-                </p>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPdfReportType('BUKU_AGENDA')}
-                className={`p-3 rounded-2xl border font-bold text-left transition cursor-pointer space-y-1 ${
-                  pdfReportType === 'BUKU_AGENDA'
-                    ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
-                    : 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="text-xs font-black">Buku Agenda Guru</span>
-                </div>
-                <p className="text-[10px] text-slate-500 font-normal">
-                  Rekap seluruh materi & agenda mengajar 1 semester
                 </p>
               </button>
 
@@ -1728,19 +2178,19 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
 
               <button
                 type="button"
-                onClick={() => setPdfReportType('TANGGAL')}
+                onClick={() => setPdfReportType('BUKU_AGENDA')}
                 className={`p-3 rounded-2xl border font-bold text-left transition cursor-pointer space-y-1 ${
-                  pdfReportType === 'TANGGAL'
+                  pdfReportType === 'BUKU_AGENDA'
                     ? 'bg-blue-50 border-blue-500 text-blue-900 shadow-2xs'
                     : 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  <CalendarRange className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="text-xs font-black">Per Tanggal</span>
+                  <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                  <span className="text-xs font-black">Buku Agenda Mengajar</span>
                 </div>
                 <p className="text-[10px] text-slate-500 font-normal">
-                  Rekap presensi pada tanggal / periode tertentu
+                  Rekap seluruh materi & agenda mengajar 1 semester
                 </p>
               </button>
             </div>
@@ -1788,6 +2238,18 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                   </select>
                 </div>
               </div>
+
+              {pdfReportType === 'REKAP_JURNAL' && (
+                <div className="p-3 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-900 space-y-1.5">
+                  <p className="font-bold flex items-center gap-1 text-[11px]">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Mode Ekspor Rekap Jurnal Fleksibel</span>
+                  </p>
+                  <p className="text-[10px] text-emerald-800">
+                    Klik tombol di bawah untuk membuka panel filter lanjutan (berdasarkan rentang tanggal, materi pokok spesifik, atau pilihan pertemuan tertentu).
+                  </p>
+                </div>
+              )}
 
               {pdfReportType === 'PERTEMUAN' && (
                 <div>
@@ -1847,8 +2309,479 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                 className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl text-xs font-black transition flex items-center gap-2 shadow-xs cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>{isExportingPdf ? 'Membuat PDF...' : 'Unduh File PDF Sekarang'}</span>
+                <span>
+                  {isExportingPdf
+                    ? 'Membuat PDF...'
+                    : pdfReportType === 'REKAP_JURNAL'
+                    ? 'Buka Filter Ekspor Jurnal'
+                    : 'Unduh File PDF Sekarang'}
+                </span>
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL FILTER & EKSPOR REKAP JURNAL PEMBELAJARAN (PDF) ===== */}
+      {showJournalExportModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150 space-y-4 overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shadow-2xs">
+                  <FileDown className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900">
+                    Ekspor Rekap Jurnal Pembelajaran (PDF)
+                  </h3>
+                  <p className="text-[10px] text-slate-500">
+                    Unduh buku agenda & rekap jurnal KBM dengan filter tanggal, materi, atau pertemuan tertentu.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowJournalExportModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-1.5 rounded-xl hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body: Scrollable Filters */}
+            <div className="overflow-y-auto space-y-4 pr-1 text-xs">
+              {/* Section 1: Rombel & Mapel */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200">
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                    Kelas / Rombongan Belajar
+                  </label>
+                  <select
+                    value={jExpClass}
+                    onChange={(e) => setJExpClass(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                  >
+                    <option value="ALL">Semua Kelas ({teacher.nama})</option>
+                    {classes.map((c) => (
+                      <option key={c} value={c}>
+                        Kelas {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-extrabold text-slate-700 mb-1">
+                    Mata Pelajaran
+                  </label>
+                  <select
+                    value={jExpMapel}
+                    onChange={(e) => setJExpMapel(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 truncate"
+                  >
+                    <option value="ALL">Semua Mata Pelajaran</option>
+                    {teacherMapelList.map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                    {OFFICIAL_SUBJECTS.filter((s) => !teacherMapelList.includes(s)).map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Section 2: Filter Rentang Tanggal */}
+              <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <CalendarRange className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Filter Tanggal Pelaksanaan</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {jExpDateMode === 'ALL'
+                      ? 'Seluruh Tanggal'
+                      : jExpDateMode === 'SINGLE'
+                      ? `Tanggal: ${jExpStartDate}`
+                      : `${jExpStartDate} s.d ${jExpEndDate}`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-white rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setJExpDateMode('ALL')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpDateMode === 'ALL'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Semua Tanggal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJExpDateMode('SINGLE')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpDateMode === 'SINGLE'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Tanggal Tertentu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJExpDateMode('RANGE')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpDateMode === 'RANGE'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Rentang Tanggal
+                  </button>
+                </div>
+
+                {jExpDateMode === 'SINGLE' && (
+                  <div className="pt-1">
+                    <input
+                      type="date"
+                      value={jExpStartDate}
+                      onChange={(e) => setJExpStartDate(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                    />
+                  </div>
+                )}
+
+                {jExpDateMode === 'RANGE' && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                        Dari Tanggal
+                      </label>
+                      <input
+                        type="date"
+                        value={jExpStartDate}
+                        onChange={(e) => setJExpStartDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                        Sampai Tanggal
+                      </label>
+                      <input
+                        type="date"
+                        value={jExpEndDate}
+                        onChange={(e) => setJExpEndDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Filter Pertemuan Tertentu */}
+              <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <ListOrdered className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Filter Nomor Pertemuan (KBM)</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {jExpPertemuanMode === 'ALL'
+                      ? 'Semua Pertemuan'
+                      : jExpPertemuanMode === 'SINGLE'
+                      ? `Pertemuan Ke-${jExpPertemuanSingle}`
+                      : `P${jExpPertemuanFrom} s.d P${jExpPertemuanTo}`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-white rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setJExpPertemuanMode('ALL')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpPertemuanMode === 'ALL'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Semua Pertemuan
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJExpPertemuanMode('SINGLE')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpPertemuanMode === 'SINGLE'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Pertemuan Spesifik
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJExpPertemuanMode('RANGE')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpPertemuanMode === 'RANGE'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Rentang (P1 - Pn)
+                  </button>
+                </div>
+
+                {jExpPertemuanMode === 'SINGLE' && (
+                  <div className="pt-1">
+                    <select
+                      value={jExpPertemuanSingle}
+                      onChange={(e) => setJExpPertemuanSingle(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                    >
+                      {Array.from({ length: 32 }, (_, i) => i + 1).map((p) => {
+                        const matchingCount = journals.filter(
+                          (j) =>
+                            (jExpClass === 'ALL' || j.kelas === jExpClass) &&
+                            (jExpMapel === 'ALL' || j.mapel === jExpMapel) &&
+                            j.pertemuanKe === p
+                        ).length;
+                        return (
+                          <option key={p} value={p}>
+                            Pertemuan Ke-{p} {matchingCount > 0 ? `(${matchingCount} sesi tercatat)` : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+
+                {jExpPertemuanMode === 'RANGE' && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                        Dari Pertemuan Ke-
+                      </label>
+                      <select
+                        value={jExpPertemuanFrom}
+                        onChange={(e) => setJExpPertemuanFrom(parseInt(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                      >
+                        {Array.from({ length: 32 }, (_, i) => i + 1).map((p) => (
+                          <option key={p} value={p}>
+                            Pertemuan Ke-{p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 mb-1">
+                        Sampai Pertemuan Ke-
+                      </label>
+                      <select
+                        value={jExpPertemuanTo}
+                        onChange={(e) => setJExpPertemuanTo(parseInt(e.target.value))}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                      >
+                        {Array.from({ length: 32 }, (_, i) => i + 1).map((p) => (
+                          <option key={p} value={p}>
+                            Pertemuan Ke-{p}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 4: Filter Materi Pembelajaran */}
+              <div className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-extrabold text-slate-800 flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Filter Materi Pokok / Topik Pembelajaran</span>
+                  </label>
+                  <span className="text-[10px] text-slate-500 font-medium">
+                    {jExpMateriMode === 'ALL'
+                      ? 'Semua Materi'
+                      : jExpMateriMode === 'KEYWORD'
+                      ? `Kata Kunci: "${jExpMateriKeyword || '-'}"`
+                      : `Topik Terpilih: "${jExpSelectedMateri || '-'}"`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-white rounded-xl border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setJExpMateriMode('ALL')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpMateriMode === 'ALL'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Semua Materi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setJExpMateriMode('KEYWORD')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpMateriMode === 'KEYWORD'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Cari Kata Kunci
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setJExpMateriMode('SELECT');
+                      if (!jExpSelectedMateri && distinctMaterials.length > 0) {
+                        setJExpSelectedMateri(distinctMaterials[0]);
+                      }
+                    }}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg transition ${
+                      jExpMateriMode === 'SELECT'
+                        ? 'bg-blue-600 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Pilih Dari Daftar
+                  </button>
+                </div>
+
+                {jExpMateriMode === 'KEYWORD' && (
+                  <div className="relative pt-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                    <input
+                      type="text"
+                      placeholder="Ketik topik materi, kompetensi dasar, atau kata kunci..."
+                      value={jExpMateriKeyword}
+                      onChange={(e) => setJExpMateriKeyword(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                    />
+                  </div>
+                )}
+
+                {jExpMateriMode === 'SELECT' && (
+                  <div className="pt-1">
+                    {distinctMaterials.length === 0 ? (
+                      <p className="text-[11px] text-slate-500 italic p-2 bg-white rounded-xl border border-slate-200">
+                        Belum ada topik materi yang tersimpan di bank data jurnal.
+                      </p>
+                    ) : (
+                      <select
+                        value={jExpSelectedMateri}
+                        onChange={(e) => setJExpSelectedMateri(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-bold text-slate-800"
+                      >
+                        {distinctMaterials.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 5: Live Matched Sessions Counter & Preview */}
+              <div className="bg-emerald-50/70 border border-emerald-200/80 rounded-2xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-emerald-900">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                    <span className="font-extrabold text-xs">
+                      Hasil Sesi KBM yang Cocok:
+                    </span>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white font-black text-xs">
+                    {matchingExportJournals.length} Sesi Terfilter
+                  </span>
+                </div>
+
+                {matchingExportJournals.length === 0 ? (
+                  <p className="text-[11px] text-amber-800 font-semibold bg-amber-50 p-2 rounded-xl border border-amber-200">
+                    ⚠️ Tidak ditemukan sesi jurnal yang cocok dengan kombinasi filter di atas. Ubah filter untuk melanjutkan.
+                  </p>
+                ) : (
+                  <div className="max-h-28 overflow-y-auto space-y-1.5 pr-1">
+                    {matchingExportJournals.map((j) => (
+                      <div
+                        key={j.id}
+                        className="flex items-center justify-between gap-2 p-2 bg-white rounded-xl border border-emerald-100 text-[11px]"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-black text-[9px] shrink-0">
+                            P{j.pertemuanKe}
+                          </span>
+                          <span className="font-bold text-slate-800 truncate">
+                            {j.materiPokok}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                            ({j.tanggal} • Kelas {j.kelas})
+                          </span>
+                        </div>
+                        <span className="text-emerald-700 font-extrabold text-[10px] shrink-0">
+                          {j.persentaseKehadiran}% Hadir
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setJExpClass('ALL');
+                  setJExpMapel(teacherMapelList[0] || OFFICIAL_SUBJECTS[0]);
+                  setJExpDateMode('ALL');
+                  setJExpPertemuanMode('ALL');
+                  setJExpMateriMode('ALL');
+                  setJExpMateriKeyword('');
+                  setJExpSelectedMateri('');
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Filter</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowJournalExportModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleExecuteJournalPdfExport}
+                  disabled={isExportingPdf || matchingExportJournals.length === 0}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white rounded-xl text-xs font-black transition flex items-center gap-2 shadow-md cursor-pointer disabled:cursor-not-allowed"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>
+                    {isExportingPdf
+                      ? 'Memproses PDF...'
+                      : `Unduh Rekap PDF (${matchingExportJournals.length} Sesi)`}
+                  </span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2096,6 +3029,19 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Teacher Profile & Photo Edit Modal */}
+      {showProfileModal && (
+        <ProfileEditModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          mode="TEACHER"
+          teacher={teacher}
+          config={config}
+          onSaveTeacher={onUpdateTeacherProfile}
+          onShowNotice={onShowNotice}
+        />
       )}
 
       {/* Student Profile Modal */}

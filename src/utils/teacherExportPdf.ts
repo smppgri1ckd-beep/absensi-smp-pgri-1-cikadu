@@ -319,15 +319,28 @@ export async function exportTeacherDailyPDF(
 }
 
 /**
- * 2. BUKU AGENDA & JURNAL PEMBELAJARAN GURU (REKAP PERTEMUAN / AGENDA MENGAJAR)
- * Menghasilkan tabel agenda mengajar resmi berisi seluruh pertemuan/materi dalam satu semester/periode.
+ * 2. BUKU AGENDA & REKAP JURNAL PEMBELAJARAN GURU (KBM TATAP MUKA)
+ * Menghasilkan rekap jurnal mengajar resmi berdasarkan filter tanggal, materi, atau pertemuan tertentu.
  */
+export interface JournalExportFilterOptions {
+  dateMode?: 'ALL' | 'SINGLE' | 'RANGE';
+  startDate?: string;
+  endDate?: string;
+  pertemuanMode?: 'ALL' | 'SINGLE' | 'RANGE';
+  singlePertemuan?: number;
+  pertemuanFrom?: number;
+  pertemuanTo?: number;
+  materiKeyword?: string;
+  customSubtitle?: string;
+}
+
 export async function exportTeacherJournalBookPDF(
   config: SchoolConfig,
   teacher: TeacherUser,
   className: string,
   mapel: string,
-  journals: TeachingJournal[]
+  journals: TeachingJournal[],
+  filterOptions?: JournalExportFilterOptions
 ) {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -379,13 +392,43 @@ export async function exportTeacherJournalBookPDF(
   // Title
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text("BUKU AGENDA & JURNAL PEMBELAJARAN GURU (KBM TATAP MUKA)", textCenterX, y, { align: 'center' });
+  doc.text("REKAP BUKU AGENDA & JURNAL PEMBELAJARAN GURU (KBM TATAP MUKA)", textCenterX, y, { align: 'center' });
   y += 4;
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.text(`Kelas / Rombel: ${className === 'ALL' ? 'Semua Kelas' : `Kelas ${className}`}   |   Mata Pelajaran: ${mapel}   |   Guru Pengajar: ${teacher.nama} (NIP: ${teacher.nip || '-'})`, textCenterX, y, { align: 'center' });
-  y += 5.5;
+  y += 4;
+
+  // Build filter label badge in PDF header
+  const filterBadges: string[] = [];
+  if (filterOptions?.dateMode === 'SINGLE' && filterOptions.startDate) {
+    filterBadges.push(`Tanggal: ${filterOptions.startDate}`);
+  } else if (filterOptions?.dateMode === 'RANGE' && (filterOptions.startDate || filterOptions.endDate)) {
+    filterBadges.push(`Periode: ${filterOptions.startDate || 'Awal'} s.d ${filterOptions.endDate || 'Akhir'}`);
+  }
+
+  if (filterOptions?.pertemuanMode === 'SINGLE' && filterOptions.singlePertemuan) {
+    filterBadges.push(`Pertemuan: Ke-${filterOptions.singlePertemuan}`);
+  } else if (filterOptions?.pertemuanMode === 'RANGE' && (filterOptions.pertemuanFrom || filterOptions.pertemuanTo)) {
+    filterBadges.push(`Pertemuan: P${filterOptions.pertemuanFrom || 1} s.d P${filterOptions.pertemuanTo || 32}`);
+  }
+
+  if (filterOptions?.materiKeyword && filterOptions.materiKeyword.trim()) {
+    filterBadges.push(`Filter Materi: "${filterOptions.materiKeyword.trim()}"`);
+  }
+
+  if (filterBadges.length > 0 || filterOptions?.customSubtitle) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(7.5);
+    doc.setTextColor(50, 70, 110);
+    const filterText = filterOptions?.customSubtitle || `[ Filter: ${filterBadges.join(' | ')} ]`;
+    doc.text(filterText, textCenterX, y, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 4.5;
+  } else {
+    y += 1.5;
+  }
 
   // Sort journals by pertemuanKe / tanggal
   const sortedJournals = [...journals].sort((a, b) => {
@@ -395,15 +438,16 @@ export async function exportTeacherJournalBookPDF(
 
   // Table Cols
   const cols = [
-    { title: "No", width: 10, align: 'center' as const },
+    { title: "No", width: 9, align: 'center' as const },
     { title: "Pertemuan", width: 18, align: 'center' as const },
-    { title: "Hari / Tanggal", width: 28, align: 'center' as const },
-    { title: "Jam Ke", width: 20, align: 'center' as const },
-    { title: "Kelas", width: 16, align: 'center' as const },
-    { title: "Materi Pokok / Kompetensi Dasar", width: 75, align: 'left' as const },
-    { title: "Kegiatan Pembelajaran & Catatan", width: 62, align: 'left' as const },
+    { title: "Hari / Tanggal", width: 26, align: 'center' as const },
+    { title: "Jam Ke", width: 18, align: 'center' as const },
+    { title: "Kelas", width: 15, align: 'center' as const },
+    { title: "Materi Pokok / Kompetensi Dasar", width: 72, align: 'left' as const },
+    { title: "Kegiatan Pembelajaran & Catatan", width: 58, align: 'left' as const },
     { title: "Kehadiran (H/S/I/A)", width: 26, align: 'center' as const },
-    { title: "Paraf", width: 18, align: 'center' as const },
+    { title: "% Hadir", width: 16, align: 'center' as const },
+    { title: "Paraf", width: 15, align: 'center' as const },
   ];
 
   const tableStartX = margin;
@@ -429,13 +473,17 @@ export async function exportTeacherJournalBookPDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
 
+  let totalHadirAll = 0;
+  let totalSiswaAll = 0;
+  let sumPercentage = 0;
+
   if (sortedJournals.length === 0) {
     doc.rect(tableStartX, y, pageWidth - (margin * 2), 12);
-    doc.text("Belum ada data jurnal pembelajaran yang tersimpan untuk filter ini.", pageWidth / 2, y + 7, { align: 'center' });
+    doc.text("Belum ada data jurnal pembelajaran yang tersimpan untuk kriteria filter ini.", pageWidth / 2, y + 7, { align: 'center' });
     y += 12;
   } else {
     sortedJournals.forEach((jrn, index) => {
-      if (y > 175) {
+      if (y > 170) {
         doc.addPage();
         y = 15;
       }
@@ -443,7 +491,15 @@ export async function exportTeacherJournalBookPDF(
       currentX = tableStartX;
       const rowHeight = 7.5;
 
-      const hadirSummary = `${jrn.hadir + jrn.terlambat}H / ${jrn.sakit}S / ${jrn.izin}I / ${jrn.alpa}A`;
+      const hadirCount = (jrn.hadir || 0) + (jrn.terlambat || 0);
+      const totalSiswa = jrn.totalSiswa || (hadirCount + (jrn.izin || 0) + (jrn.sakit || 0) + (jrn.alpa || 0)) || 1;
+      const pct = jrn.persentaseKehadiran !== undefined ? jrn.persentaseKehadiran : Math.round((hadirCount / totalSiswa) * 100);
+
+      totalHadirAll += hadirCount;
+      totalSiswaAll += totalSiswa;
+      sumPercentage += pct;
+
+      const hadirSummary = `${hadirCount}H / ${jrn.sakit || 0}S / ${jrn.izin || 0}I / ${jrn.alpa || 0}A`;
       const combinedNotes = [jrn.kegiatanPembelajaran, jrn.catatanRefleksi].filter(Boolean).join(' - ') || '-';
 
       const rowData = [
@@ -452,9 +508,10 @@ export async function exportTeacherJournalBookPDF(
         jrn.tanggal,
         jrn.jamPelajaran || '-',
         jrn.kelas,
-        jrn.materiPokok.length > 50 ? jrn.materiPokok.substring(0, 48) + '...' : jrn.materiPokok,
-        combinedNotes.length > 45 ? combinedNotes.substring(0, 43) + '...' : combinedNotes,
+        jrn.materiPokok.length > 48 ? jrn.materiPokok.substring(0, 46) + '...' : jrn.materiPokok,
+        combinedNotes.length > 42 ? combinedNotes.substring(0, 40) + '...' : combinedNotes,
         hadirSummary,
+        `${pct}%`,
         '✓',
       ];
 
@@ -472,6 +529,22 @@ export async function exportTeacherJournalBookPDF(
 
       y += rowHeight;
     });
+
+    // Summary Stat Row
+    if (sortedJournals.length > 0) {
+      const avgPct = Math.round(sumPercentage / sortedJournals.length);
+      doc.setFillColor(243, 244, 246);
+      doc.rect(tableStartX, y, pageWidth - (margin * 2), 6, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7);
+      doc.rect(tableStartX, y, pageWidth - (margin * 2), 6);
+      doc.text(
+        `Total Sesi: ${sortedJournals.length} Pertemuan  |  Total Presensi Siswa Hadir: ${totalHadirAll}  |  Rata-Rata Keterlibatan: ${avgPct}%`,
+        tableStartX + 4,
+        y + 4
+      );
+      y += 6;
+    }
   }
 
   // Signatures
@@ -509,7 +582,9 @@ export async function exportTeacherJournalBookPDF(
 
   const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
   const safeMapel = mapel.replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`Buku_Agenda_Jurnal_Guru_${className}_${safeMapel}_${cleanSchool}.pdf`);
+  const safeClass = className.replace(/[^a-zA-Z0-9]/g, '_');
+  const filterSuffix = filterBadges.length > 0 ? '_Filtered' : '';
+  doc.save(`Rekap_Jurnal_Pembelajaran_${safeClass}_${safeMapel}${filterSuffix}_${cleanSchool}.pdf`);
 }
 
 /**

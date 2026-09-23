@@ -12,6 +12,7 @@ import {
   Layers,
   ArrowUpRight,
   Filter,
+  CloudUpload,
 } from 'lucide-react';
 import { Student, AttendanceRecord, SchoolConfig } from '../types';
 import { exportRekapToExcel, exportRekapPDF } from '../utils/export';
@@ -23,6 +24,7 @@ interface AdminDashboardProps {
   config: SchoolConfig;
   totalHeb: number;
   dayKey: string;
+  onNavigateToBackup?: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -31,6 +33,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   config,
   totalHeb,
   dayKey,
+  onNavigateToBackup,
 }) => {
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -196,6 +199,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <FileText className="w-4 h-4" />
             <span>Export PDF</span>
           </button>
+
+          {onNavigateToBackup && (
+            <button
+              type="button"
+              onClick={onNavigateToBackup}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <CloudUpload className="w-4 h-4" />
+              <span>Backup Cloud</span>
+            </button>
+          )}
 
           <button
             type="button"
