@@ -21,8 +21,14 @@ import {
   Camera,
   ShieldCheck,
   Phone,
+  Database,
+  X,
+  RefreshCw,
+  Layers,
+  BookOpen,
+  Users,
 } from 'lucide-react';
-import { SchoolConfig, AttendanceRecord } from '../types';
+import { SchoolConfig, AttendanceRecord, TeachingJournal, Student, TeacherUser } from '../types';
 import { processImageFile } from '../utils/qr';
 import { playBeep } from '../utils/audio';
 import { TimeInput24 } from './TimeInput24';
@@ -30,9 +36,19 @@ import { TimeInput24 } from './TimeInput24';
 interface SettingsViewProps {
   config: SchoolConfig;
   attendance: AttendanceRecord[];
+  journals?: TeachingJournal[];
+  students?: Student[];
+  teachers?: TeacherUser[];
   onUpdateConfig: (newConfig: SchoolConfig) => Promise<void>;
   onCleanDuplicates: () => Promise<number>;
   onPurgeSemester: (year: number, semester: 'ganjil' | 'genap') => Promise<number>;
+  onPurgeSemesterJournals?: (year: number, semester: 'ganjil' | 'genap') => Promise<number>;
+  onPurgeAllAttendance?: () => Promise<number>;
+  onPurgeAllJournals?: () => Promise<number>;
+  onPurgeAllInputData?: (options?: {
+    purgeAttendance?: boolean;
+    purgeJournals?: boolean;
+  }) => Promise<{ attendanceCount: number; journalCount: number }>;
   onNavigateToBackup?: () => void;
   onShowNotice: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
@@ -41,9 +57,16 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({
   config,
   attendance,
+  journals = [],
+  students = [],
+  teachers = [],
   onUpdateConfig,
   onCleanDuplicates,
   onPurgeSemester,
+  onPurgeSemesterJournals,
+  onPurgeAllAttendance,
+  onPurgeAllJournals,
+  onPurgeAllInputData,
   onNavigateToBackup,
   onShowNotice,
   onShowConfirm,
@@ -53,6 +76,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [maintenanceSem, setMaintenanceSem] = useState<'ganjil' | 'genap'>('ganjil');
   const [isSaving, setIsSaving] = useState(false);
   const adminPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Safety Purge Modal State
+  const [isPurgeModalOpen, setIsPurgeModalOpen] = useState(false);
+  const [purgeAttendanceChecked, setPurgeAttendanceChecked] = useState(true);
+  const [purgeJournalsChecked, setPurgeJournalsChecked] = useState(true);
+  const [purgeConfirmationWord, setPurgeConfirmationWord] = useState('');
+  const [isPurgingAll, setIsPurgingAll] = useState(false);
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -117,29 +147,144 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     const startIso = maintenanceSem === 'ganjil' ? `${maintenanceYear}-07-01` : `${maintenanceYear}-01-01`;
     const endIso = maintenanceSem === 'ganjil' ? `${maintenanceYear}-12-31` : `${maintenanceYear}-06-30`;
 
-    const targets = attendance.filter((a) => a.tanggal >= startIso && a.tanggal <= endIso);
-    if (targets.length === 0) {
-      onShowNotice('Data Kosong', `Tidak ditemukan log presensi pada Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear}.`, 'warning');
+    const targetAtt = attendance.filter((a) => a.tanggal >= startIso && a.tanggal <= endIso);
+    const targetJournals = journals.filter((j) => j.tanggal >= startIso && j.tanggal <= endIso);
+
+    if (targetAtt.length === 0 && targetJournals.length === 0) {
+      onShowNotice('Data Kosong', `Tidak ditemukan log presensi atau jurnal pada Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear}.`, 'warning');
       return;
     }
 
-    const rows = [
+    const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Presensi
+    const attRows: any[][] = [
       ["ARSIP CADANGAN PRESENSI SEMESTER"],
       [config.namaSekolah],
       [`Periode: ${startIso} s/d ${endIso} (Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear})`],
       [],
-      ["ID", "TANGGAL", "WAKTU", "NISN", "NAMA", "KELAS", "SESI", "STATUS"]
+      ["ID", "TANGGAL", "WAKTU", "NISN", "NAMA", "KELAS", "SESI", "KATEGORI", "STATUS", "MAPEL", "GURU"]
     ];
-    targets.forEach((t) =>
-      rows.push([t.id, t.tanggal, t.waktu, t.nisn, t.nama, t.kelas, t.sesi, t.status])
+    targetAtt.forEach((t) =>
+      attRows.push([
+        t.id,
+        t.tanggal,
+        t.waktu,
+        t.nisn,
+        t.nama,
+        t.kelas,
+        t.sesi,
+        t.kategori || 'APEL',
+        t.status,
+        t.mapel || '-',
+        t.guruNama || '-'
+      ])
     );
+    const wsAtt = XLSX.utils.aoa_to_sheet(attRows);
+    XLSX.utils.book_append_sheet(wb, wsAtt, "ARSIP_PRESENSI");
+
+    // Sheet 2: Jurnal Mengajar
+    if (targetJournals.length > 0) {
+      const jrnRows: any[][] = [
+        ["ARSIP CADANGAN JURNAL MENGAJAR SEMESTER"],
+        [config.namaSekolah],
+        [`Periode: ${startIso} s/d ${endIso} (Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear})`],
+        [],
+        ["ID", "TANGGAL", "GURU", "MAPEL", "KELAS", "PERTEMUAN", "JAM", "MATERI POKOK", "KEGIATAN", "STATUS SUPERVISI", "HADIR", "SAKIT", "IZIN", "ALPA"]
+      ];
+      targetJournals.forEach((j) =>
+        jrnRows.push([
+          j.id,
+          j.tanggal,
+          j.guruNama,
+          j.mapel,
+          j.kelas,
+          j.pertemuanKe,
+          j.jamPelajaran,
+          j.materiPokok,
+          j.kegiatanPembelajaran,
+          j.supervisionStatus || 'PENDING',
+          j.hadir || 0,
+          j.sakit || 0,
+          j.izin || 0,
+          j.alpa || 0,
+        ])
+      );
+      const wsJrn = XLSX.utils.aoa_to_sheet(jrnRows);
+      XLSX.utils.book_append_sheet(wb, wsJrn, "JURNAL_MENGAJAR");
+    }
+
+    XLSX.writeFile(wb, `Cadangan_Semester_${maintenanceSem.toUpperCase()}_${maintenanceYear}.xlsx`);
+    onShowNotice('Cadangan Berhasil', `${targetAtt.length} presensi & ${targetJournals.length} jurnal berhasil diekspor ke Excel!`, 'success');
+  };
+
+  const handleBackupFullExcel = () => {
+    if (attendance.length === 0 && journals.length === 0) {
+      onShowNotice('Data Kosong', 'Tidak ada data presensi atau jurnal mengajar di sistem.', 'warning');
+      return;
+    }
 
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, "ARSIP_PRESENSI");
-    XLSX.writeFile(wb, `Cadangan_Presensi_${maintenanceSem.toUpperCase()}_${maintenanceYear}.xlsx`);
 
-    onShowNotice('Cadangan Berhasil', `${targets.length} catatan presensi berhasil diunduh ke Excel. Data di cloud tetap aman!`, 'success');
+    // Sheet 1: Semua Presensi
+    const attRows: any[][] = [
+      ["ARSIP LENGKAP SELURUH PRESENSI SEKOLAH"],
+      [config.namaSekolah],
+      [`Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID')} - Total: ${attendance.length} Baris`],
+      [],
+      ["ID", "TANGGAL", "WAKTU", "NISN", "NAMA", "KELAS", "SESI", "KATEGORI", "STATUS", "MAPEL", "GURU"]
+    ];
+    attendance.forEach((t) =>
+      attRows.push([
+        t.id,
+        t.tanggal,
+        t.waktu,
+        t.nisn,
+        t.nama,
+        t.kelas,
+        t.sesi,
+        t.kategori || 'APEL',
+        t.status,
+        t.mapel || '-',
+        t.guruNama || '-'
+      ])
+    );
+    const wsAtt = XLSX.utils.aoa_to_sheet(attRows);
+    XLSX.utils.book_append_sheet(wb, wsAtt, "SEMUA_PRESENSI");
+
+    // Sheet 2: Semua Jurnal
+    if (journals.length > 0) {
+      const jrnRows: any[][] = [
+        ["ARSIP LENGKAP SELURUH JURNAL MENGAJAR GURU"],
+        [config.namaSekolah],
+        [`Tanggal Ekspor: ${new Date().toLocaleDateString('id-ID')} - Total: ${journals.length} Jurnal`],
+        [],
+        ["ID", "TANGGAL", "GURU", "MAPEL", "KELAS", "PERTEMUAN", "JAM", "MATERI POKOK", "KEGIATAN", "STATUS SUPERVISI", "HADIR", "SAKIT", "IZIN", "ALPA"]
+      ];
+      journals.forEach((j) =>
+        jrnRows.push([
+          j.id,
+          j.tanggal,
+          j.guruNama,
+          j.mapel,
+          j.kelas,
+          j.pertemuanKe,
+          j.jamPelajaran,
+          j.materiPokok,
+          j.kegiatanPembelajaran,
+          j.supervisionStatus || 'PENDING',
+          j.hadir || 0,
+          j.sakit || 0,
+          j.izin || 0,
+          j.alpa || 0,
+        ])
+      );
+      const wsJrn = XLSX.utils.aoa_to_sheet(jrnRows);
+      XLSX.utils.book_append_sheet(wb, wsJrn, "SEMUA_JURNAL");
+    }
+
+    XLSX.writeFile(wb, `Backup_Total_${config.namaSekolah.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    onShowNotice('Cadangan Lengkap Berhasil', `File cadangan seluruh data (${attendance.length} presensi, ${journals.length} jurnal) berhasil diunduh.`, 'success');
   };
 
   const handleCleanupDuplicates = () => {
@@ -155,13 +300,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   const handlePurgeSemester = () => {
     onShowConfirm(
-      'Konfirmasi Reset Semester',
-      `PERINGATAN: Seluruh log presensi pada Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear} akan dihapus permanen. Master siswa tetap 100% aman. Lanjutkan?`,
+      'Konfirmasi Reset Presensi Semester',
+      `PERINGATAN: Seluruh log presensi pada Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear} akan dihapus permanen. Master siswa & guru tetap 100% aman. Lanjutkan?`,
       async () => {
         const deleted = await onPurgeSemester(maintenanceYear, maintenanceSem);
         onShowNotice('Pembersihan Selesai', `${deleted} catatan presensi semester berhasil dibersihkan!`, 'success');
       }
     );
+  };
+
+  const handlePurgeSemesterJournals = () => {
+    if (!onPurgeSemesterJournals) return;
+    onShowConfirm(
+      'Konfirmasi Reset Jurnal Mengajar Semester',
+      `PERINGATAN: Seluruh jurnal mengajar & catatan KBM pada Semester ${maintenanceSem.toUpperCase()} ${maintenanceYear} akan dihapus permanen. Lanjutkan?`,
+      async () => {
+        const deleted = await onPurgeSemesterJournals(maintenanceYear, maintenanceSem);
+        onShowNotice('Pembersihan Selesai', `${deleted} jurnal mengajar semester berhasil dibersihkan!`, 'success');
+      }
+    );
+  };
+
+  const handleExecutePurgeAllInputData = async () => {
+    if (purgeConfirmationWord.trim() !== 'HAPUS SEMUA') {
+      onShowNotice('Konfirmasi Salah', 'Ketik kata "HAPUS SEMUA" dengan huruf kapital untuk mengonfirmasi penghapusan data.', 'warning');
+      return;
+    }
+
+    if (!purgeAttendanceChecked && !purgeJournalsChecked) {
+      onShowNotice('Pilih Kategori', 'Pilih minimal salah satu kategori data yang ingin dihapus.', 'warning');
+      return;
+    }
+
+    setIsPurgingAll(true);
+    try {
+      if (onPurgeAllInputData) {
+        const res = await onPurgeAllInputData({
+          purgeAttendance: purgeAttendanceChecked,
+          purgeJournals: purgeJournalsChecked,
+        });
+        onShowNotice(
+          'Data Berhasil Dihapus',
+          `Sukses membersihkan ${res.attendanceCount} log presensi dan ${res.journalCount} jurnal mengajar. Master data siswa & guru tetap aman!`,
+          'success'
+        );
+      } else {
+        if (purgeAttendanceChecked && onPurgeAllAttendance) {
+          await onPurgeAllAttendance();
+        }
+        if (purgeJournalsChecked && onPurgeAllJournals) {
+          await onPurgeAllJournals();
+        }
+        onShowNotice('Data Berhasil Dihapus', 'Seluruh data inputan terpilih telah dibersihkan dari database.', 'success');
+      }
+      setIsPurgeModalOpen(false);
+      setPurgeConfirmationWord('');
+    } catch (err: any) {
+      onShowNotice('Gagal Menghapus', err.message || 'Terjadi kesalahan saat menghapus data.', 'warning');
+    } finally {
+      setIsPurgingAll(false);
+    }
   };
 
   return (
@@ -808,13 +1006,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             )}
           </div>
 
-          {/* 6. DATABASE MAINTENANCE */}
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3 text-xs">
-            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Server className="w-4 h-4 text-rose-600" />
-              Pemeliharaan &amp; Cadangan Database Cloud
-            </h4>
+          {/* 6. DATABASE MAINTENANCE & DATA PURGE SUITE */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <Server className="w-4 h-4 text-rose-600" />
+                <span>Pemeliharaan &amp; Cadangan Database Cloud</span>
+              </h4>
+              <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md font-bold text-[10px]">
+                Konsol Admin
+              </span>
+            </div>
 
+            {/* Live Database Overview Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+              <div className="bg-white p-2 rounded-lg border border-slate-200 text-center">
+                <span className="text-[10px] text-slate-500 font-bold block">Log Presensi</span>
+                <span className="text-sm font-black text-slate-900">{attendance.length}</span>
+                <span className="text-[9px] text-amber-600 block font-semibold">Transaksi</span>
+              </div>
+              <div className="bg-white p-2 rounded-lg border border-slate-200 text-center">
+                <span className="text-[10px] text-slate-500 font-bold block">Jurnal KBM</span>
+                <span className="text-sm font-black text-slate-900">{journals.length}</span>
+                <span className="text-[9px] text-amber-600 block font-semibold">Transaksi</span>
+              </div>
+              <div className="bg-white p-2 rounded-lg border border-slate-200 text-center">
+                <span className="text-[10px] text-slate-500 font-bold block">Master Siswa</span>
+                <span className="text-sm font-black text-emerald-700">{students.length}</span>
+                <span className="text-[9px] text-emerald-600 block font-bold">Aman (Master)</span>
+              </div>
+              <div className="bg-white p-2 rounded-lg border border-slate-200 text-center">
+                <span className="text-[10px] text-slate-500 font-bold block">Master Guru</span>
+                <span className="text-sm font-black text-emerald-700">{teachers.length}</span>
+                <span className="text-[9px] text-emerald-600 block font-bold">Aman (Master)</span>
+              </div>
+            </div>
+
+            {/* Target Year & Semester Filter for Scope Operations */}
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-[10px] font-bold text-slate-600 mb-1">
@@ -842,6 +1070,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
 
+            {/* Maintenance Action Buttons */}
             <div className="space-y-2 pt-1">
               <button
                 type="button"
@@ -849,7 +1078,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4" />
-                <span>1. Unduh Cadangan Excel (.xlsx) Saja</span>
+                <span>1. Unduh Cadangan Excel (.xlsx) Semester Ini</span>
               </button>
 
               <button
@@ -861,21 +1090,203 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <span>2. Bersihkan Data Berganda di Firestore</span>
               </button>
 
-              <button
-                type="button"
-                onClick={handlePurgeSemester}
-                className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>3. Bersihkan / Reset Presensi Semester</span>
-              </button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={handlePurgeSemester}
+                  className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer text-[11px]"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>3. Reset Presensi Semester</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePurgeSemesterJournals}
+                  className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer text-[11px]"
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>4. Reset Jurnal Semester</span>
+                </button>
+              </div>
+
+              {/* Master Full Purge Trigger Button */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurgeConfirmationWord('');
+                    setPurgeAttendanceChecked(true);
+                    setPurgeJournalsChecked(true);
+                    setIsPurgeModalOpen(true);
+                  }}
+                  className="w-full py-2.5 bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 text-white font-extrabold rounded-xl transition flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>5. HAPUS SEMUA DATA INPUTAN (TOTAL RESET)</span>
+                </button>
+              </div>
             </div>
-            <p className="text-[10px] text-slate-400 italic text-center">
-              Master data siswa tetap 100% aman dan tidak terpengaruh pembersihan log.
+
+            <p className="text-[10px] text-slate-400 italic text-center pt-1">
+              Master data siswa &amp; guru tetap 100% aman dan tidak terpengaruh pembersihan log transaksi.
             </p>
           </div>
         </div>
       </div>
+
+      {/* SAFETY PURGE CONFIRMATION MODAL */}
+      {isPurgeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-rose-600 to-red-700 text-white p-5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base leading-tight">
+                    Konfirmasi Hapus Semua Data Inputan
+                  </h3>
+                  <p className="text-xs text-rose-100 mt-0.5">
+                    Pembersihan Total Log Transaksi Presensi &amp; Jurnal KBM
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPurgeModalOpen(false)}
+                className="p-1 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-5 space-y-4 text-xs">
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 space-y-1">
+                <p className="font-bold">
+                  PERHATIAN: Tindakan ini akan menghapus data transaksi secara permanen!
+                </p>
+                <p className="text-[11px] leading-relaxed">
+                  Fitur ini digunakan saat awal semester baru atau ketika ingin mengosongkan seluruh riwayat presensi dan jurnal yang pernah diinput.
+                </p>
+              </div>
+
+              {/* Data Checklist Options */}
+              <div className="space-y-2">
+                <span className="font-bold text-slate-700 block">
+                  Pilih Data yang Akan Dihapus:
+                </span>
+
+                <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer transition">
+                  <input
+                    type="checkbox"
+                    checked={purgeAttendanceChecked}
+                    onChange={(e) => setPurgeAttendanceChecked(e.target.checked)}
+                    className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-bold text-slate-900 block">
+                      Semua Log Presensi Siswa &amp; Guru
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Total {attendance.length} baris riwayat (Presensi Gerbang/Apel + Sesi KBM Kelas)
+                    </span>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-2.5 p-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 cursor-pointer transition">
+                  <input
+                    type="checkbox"
+                    checked={purgeJournalsChecked}
+                    onChange={(e) => setPurgeJournalsChecked(e.target.checked)}
+                    className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="font-bold text-slate-900 block">
+                      Semua Jurnal Mengajar Guru &amp; Catatan Supervisi
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Total {journals.length} entri jurnal pembelajaran &amp; evaluasi pengawas
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              {/* Safe Master Guarantee */}
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-2.5 text-emerald-800">
+                <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-[11px] leading-relaxed">
+                  <span className="font-bold block">Jaminan Keamanan Data Master:</span>
+                  Data Master Siswa ({students.length} siswa) &amp; Master Guru ({teachers.length} guru) serta profil sekolah <strong>tetap 100% aman dan tidak akan terhapus</strong>.
+                </div>
+              </div>
+
+              {/* Backup Recommendation Button */}
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-2xl flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="font-bold text-blue-900 block text-[11px]">Belum unduh cadangan?</span>
+                  <span className="text-[10px] text-blue-600">Simpan salinan offline sebelum menghapus.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBackupFullExcel}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs flex items-center gap-1.5 shrink-0 shadow-2xs transition"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                  <span>Unduh Excel</span>
+                </button>
+              </div>
+
+              {/* Safety Word Input */}
+              <div className="space-y-1.5 pt-1">
+                <label className="block font-bold text-slate-700 text-[11px]">
+                  Ketik kata <span className="text-rose-600 font-black tracking-wider">HAPUS SEMUA</span> untuk konfirmasi:
+                </label>
+                <input
+                  type="text"
+                  value={purgeConfirmationWord}
+                  onChange={(e) => setPurgeConfirmationWord(e.target.value)}
+                  placeholder="Ketik HAPUS SEMUA"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border-2 border-slate-300 focus:border-rose-500 rounded-xl font-mono text-center font-bold text-slate-900 uppercase tracking-wider focus:outline-hidden"
+                />
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isPurgingAll}
+                onClick={() => setIsPurgeModalOpen(false)}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold text-xs transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={purgeConfirmationWord.trim() !== 'HAPUS SEMUA' || isPurgingAll || (!purgeAttendanceChecked && !purgeJournalsChecked)}
+                onClick={handleExecutePurgeAllInputData}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl font-black text-xs transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+              >
+                {isPurgingAll ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Menghapus Data...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Ya, Hapus Data Sekarang</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 };

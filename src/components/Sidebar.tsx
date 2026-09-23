@@ -117,9 +117,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         {
           id: 'portalGuru' as ViewType,
-          label: 'Presensi KBM Kelas (Guru)',
-          shortLabel: 'Portal Guru',
-          icon: <GraduationCap className="w-4 h-4 text-teal-600" />,
+          label: 'Supervisi KBM & Jurnal Guru',
+          shortLabel: 'Supervisi KBM',
+          icon: <ShieldCheck className="w-4 h-4 text-teal-600" />,
         },
         {
           id: 'kelolaGuru' as ViewType,

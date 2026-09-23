@@ -43,6 +43,7 @@ import { SettingsView } from './components/SettingsView';
 import { PublicRekapView } from './components/PublicRekapView';
 import { TeacherManageView } from './components/TeacherManageView';
 import { TeacherPortalView } from './components/TeacherPortalView';
+import { AdminKbmSupervisionView } from './components/AdminKbmSupervisionView';
 import { BackupDriveView } from './components/BackupDriveView';
 import { ProfileEditModal } from './components/ProfileEditModal';
 import { Sidebar, TeacherTabType } from './components/Sidebar';
@@ -1273,7 +1274,31 @@ export default function App() {
     return dupIds.length;
   };
 
-  // Maintenance: purge semester
+  // Batch delete teaching journals
+  const handleBatchDeleteJournals = async (ids: string[]) => {
+    setTeachingJournals((prev) => {
+      const updated = prev.filter((j) => !ids.includes(j.id));
+      localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
+      return updated;
+    });
+
+    const firestore = db;
+    if (firestore) {
+      try {
+        const chunkSize = 200;
+        for (let i = 0; i < ids.length; i += chunkSize) {
+          const chunk = ids.slice(i, i + chunkSize);
+          const batch = writeBatch(firestore);
+          chunk.forEach((id) => batch.delete(doc(firestore, 'jurnal_mengajar', id)));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Firestore batch delete journals error:', err);
+      }
+    }
+  };
+
+  // Maintenance: purge semester attendance
   const handlePurgeSemester = async (
     year: number,
     sem: 'ganjil' | 'genap'
@@ -1289,6 +1314,68 @@ export default function App() {
       await handleBatchDeleteAttendance(targets);
     }
     return targets.length;
+  };
+
+  // Maintenance: purge semester journals
+  const handlePurgeSemesterJournals = async (
+    year: number,
+    sem: 'ganjil' | 'genap'
+  ): Promise<number> => {
+    const startIso = sem === 'ganjil' ? `${year}-07-01` : `${year}-01-01`;
+    const endIso = sem === 'ganjil' ? `${year}-12-31` : `${year}-06-30`;
+
+    const targetIds = teachingJournals
+      .filter((j) => j.tanggal >= startIso && j.tanggal <= endIso)
+      .map((j) => j.id);
+
+    if (targetIds.length > 0) {
+      await handleBatchDeleteJournals(targetIds);
+    }
+    return targetIds.length;
+  };
+
+  // Maintenance: purge ALL attendance logs
+  const handlePurgeAllAttendance = async (): Promise<number> => {
+    const ids = attendance.map((a) => a.id);
+    if (ids.length > 0) {
+      await handleBatchDeleteAttendance(ids);
+    }
+    return ids.length;
+  };
+
+  // Maintenance: purge ALL teaching journals
+  const handlePurgeAllJournals = async (): Promise<number> => {
+    const ids = teachingJournals.map((j) => j.id);
+    if (ids.length > 0) {
+      await handleBatchDeleteJournals(ids);
+    }
+    return ids.length;
+  };
+
+  // Maintenance: purge ALL input data (attendance logs + teaching journals)
+  const handlePurgeAllInputData = async (options?: {
+    purgeAttendance?: boolean;
+    purgeJournals?: boolean;
+  }): Promise<{ attendanceCount: number; journalCount: number }> => {
+    const doAttendance = options?.purgeAttendance !== false;
+    const doJournals = options?.purgeJournals !== false;
+
+    let deletedAttCount = 0;
+    let deletedJrnCount = 0;
+
+    if (doAttendance && attendance.length > 0) {
+      const attIds = attendance.map((a) => a.id);
+      await handleBatchDeleteAttendance(attIds);
+      deletedAttCount = attIds.length;
+    }
+
+    if (doJournals && teachingJournals.length > 0) {
+      const jrnIds = teachingJournals.map((j) => j.id);
+      await handleBatchDeleteJournals(jrnIds);
+      deletedJrnCount = jrnIds.length;
+    }
+
+    return { attendanceCount: deletedAttCount, journalCount: deletedJrnCount };
   };
 
   // Restore Complete Backup Archive into Database
@@ -1556,23 +1643,33 @@ export default function App() {
             />
           )}
 
-          {/* Guru Views */}
+          {/* Admin: Supervisi & Monitoring KBM Guru */}
+          {currentView === 'portalGuru' && userSession.role === 'ADMIN' && (
+            <AdminKbmSupervisionView
+              teachers={teachers}
+              students={students}
+              attendance={attendance}
+              journals={teachingJournals}
+              config={config}
+              activeSession={computedSession}
+              timeString={timeFormatted}
+              dateString={dateFormatted}
+              dayKey={currentDayKey}
+              onRecordAttendance={handleRecordAttendance}
+              onDeleteAttendance={handleDeleteAttendance}
+              onSaveJournal={handleSaveTeachingJournal}
+              onDeleteJournal={handleDeleteTeachingJournal}
+              onShowNotice={showNotice}
+              onShowConfirm={showConfirm}
+            />
+          )}
+
+          {/* Guru Views: Portal Guru & Presensi KBM */}
           {(currentView === 'portalGuru' || currentView === 'guruIzinAbsen') &&
-            (userSession.role === 'GURU' || userSession.role === 'ADMIN') && (
+            userSession.role === 'GURU' &&
+            userSession.teacherData && (
               <TeacherPortalView
-                teacher={
-                  userSession.teacherData ||
-                  teachers[0] || {
-                    id: 'admin-guru',
-                    nama: userSession.name || 'Administrator',
-                    nip: '-',
-                    username: 'admin',
-                    password: '',
-                    mapel: 'Semua Mata Pelajaran',
-                    status: 'AKTIF',
-                    createdAt: new Date().toISOString(),
-                  }
-                }
+                teacher={userSession.teacherData}
                 students={students}
                 attendance={attendance}
                 journals={teachingJournals}
@@ -1696,9 +1793,16 @@ export default function App() {
             <SettingsView
               config={config}
               attendance={attendance}
+              journals={teachingJournals}
+              students={students}
+              teachers={teachers}
               onUpdateConfig={handleUpdateConfig}
               onCleanDuplicates={handleCleanDuplicates}
               onPurgeSemester={handlePurgeSemester}
+              onPurgeSemesterJournals={handlePurgeSemesterJournals}
+              onPurgeAllAttendance={handlePurgeAllAttendance}
+              onPurgeAllJournals={handlePurgeAllJournals}
+              onPurgeAllInputData={handlePurgeAllInputData}
               onNavigateToBackup={() => setCurrentView('backupData')}
               onShowNotice={showNotice}
               onShowConfirm={showConfirm}

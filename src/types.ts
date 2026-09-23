@@ -172,6 +172,18 @@ export interface TeachingJournal {
   sakit: number;
   alpa: number;
   persentaseKehadiran: number;
+  // Supervision & Verification Fields
+  supervisionStatus?: 'PENDING' | 'VERIFIED' | 'REVISION_NEEDED';
+  supervisionScore?: number; // 1 - 100
+  supervisionRubric?: {
+    mastery?: number; // 1 - 5 (Penguasaan Materi)
+    classroomMgmt?: number; // 1 - 5 (Pengelolaan Kelas & Ketertiban)
+    pedagogy?: number; // 1 - 5 (Metode & Media Pembelajaran)
+    discipline?: number; // 1 - 5 (Ketepatan Waktu & Kedisiplinan)
+  };
+  supervisorNotes?: string;
+  verifiedBy?: string;
+  verifiedAt?: string;
   createdAt: string;
   updatedAt?: string;
 }
