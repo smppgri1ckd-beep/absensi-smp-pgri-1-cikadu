@@ -307,13 +307,13 @@ export async function exportRekapPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 4, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 4, { align: 'center' });
 
   // Duty Teacher Name
   doc.setFont('helvetica', 'bold');
   doc.text(piketName || "Guru Piket, S.Pd", rightSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${piketNip || '-'}`, rightSignX, y + 4, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${piketNip || '-'}`, rightSignX, y + 4, { align: 'center' });
 
   doc.save(`Rekap_Presensi_${config.namaSekolah.replace(/\s+/g, '_')}_${tglAwal}_sd_${tglAkhir}.pdf`);
 }
@@ -528,7 +528,7 @@ export async function exportSingleStudentAttendancePDF(
 
   doc.setFont('helvetica', 'normal');
   doc.text('Nama Terang Orang Tua / Wali', leftSignX, y + 4, { align: 'center' });
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, rightSignX, y + 4, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, rightSignX, y + 4, { align: 'center' });
 
   doc.save(`Presensi_${student.nisn}_${student.nama.replace(/\s+/g, '_')}.pdf`);
 }

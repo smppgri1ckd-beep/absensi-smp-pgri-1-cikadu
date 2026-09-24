@@ -982,10 +982,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 <div>
                   <label className="block text-slate-600 font-bold mb-1">
-                    NIP Kepala Sekolah
+                    NIP / NUPTK Kepala Sekolah
                   </label>
                   <input
                     type="text"
+                    placeholder="NIP / NUPTK Kepala Sekolah"
                     value={formData.nipKepsek}
                     onChange={(e) => setFormData({ ...formData, nipKepsek: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl font-mono focus:outline-hidden"
@@ -1203,7 +1204,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   />
                   <input
                     type="text"
-                    placeholder="NIP Guru Piket"
+                    placeholder="NIP / NUPTK Guru Piket"
                     value={formData.jadwalPiket[day]?.nip || ''}
                     onChange={(e) =>
                       setFormData({

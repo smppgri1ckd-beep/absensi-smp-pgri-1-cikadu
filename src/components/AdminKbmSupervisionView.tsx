@@ -1448,7 +1448,7 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
                       <div>
                         <h4 className="font-extrabold text-sm text-slate-900 line-clamp-1">{t.nama}</h4>
                         <p className="text-xs text-blue-700 font-semibold">{t.mapel}</p>
-                        <p className="text-[10px] text-slate-400">NIP: {t.nip || '-'}</p>
+                        <p className="text-[10px] text-slate-400">NIP/NUPTK: {t.nip || '-'}</p>
                       </div>
                     </div>
 
@@ -2142,7 +2142,7 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
                   </div>
                   <div>
                     <h4 className="font-black text-sm">Mode Delegasi: {currentAssistanceTeacher.nama}</h4>
-                    <p className="text-[11px] text-slate-300">{currentAssistanceTeacher.mapel} • NIP: {currentAssistanceTeacher.nip || '-'}</p>
+                    <p className="text-[11px] text-slate-300">{currentAssistanceTeacher.mapel} • NIP/NUPTK: {currentAssistanceTeacher.nip || '-'}</p>
                   </div>
                 </div>
                 <span className="text-[10px] px-3 py-1 bg-amber-400 text-slate-950 font-black rounded-full">
@@ -2434,7 +2434,7 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
                     </span>
                   </h3>
                   <p className="text-xs text-blue-700 font-semibold">{selectedTeacherModal.mapel}</p>
-                  <p className="text-[11px] text-slate-400">NIP: {selectedTeacherModal.nip || '-'}</p>
+                  <p className="text-[11px] text-slate-400">NIP/NUPTK: {selectedTeacherModal.nip || '-'}</p>
                 </div>
               </div>
 

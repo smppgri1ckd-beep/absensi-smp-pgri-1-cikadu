@@ -426,7 +426,7 @@ export const TeacherImportModal: React.FC<TeacherImportModalProps> = ({
               <p className="text-[11px] text-amber-800 leading-relaxed">
                 &bull; <strong>Banyak Mata Pelajaran:</strong> Jika 1 guru mengajar hingga 3 mata pelajaran (misal: <strong>Matematika, IPA, Informatika</strong>), pisahkan nama mapel dengan tanda koma (<strong>,</strong>).<br />
                 &bull; <strong>Wali Kelas:</strong> Isi kode kelas seperti <strong>VII-A</strong>, <strong>VIII-B</strong>, atau tulis <strong>-</strong> jika bukan wali kelas.<br />
-                &bull; <strong>NIP:</strong> Jika guru honorer belum punya NIP, cukup isi tanda strip (<strong>-</strong>).
+                &bull; <strong>NIP / NUPTK:</strong> Isi NIP ASN/PPPK (18 digit) atau NUPTK (16 digit). Jika guru honorer/GTT belum memiliki NIP/NUPTK, cukup isi tanda strip (<strong>-</strong>) atau kosongkan.
               </p>
             </div>
           </div>

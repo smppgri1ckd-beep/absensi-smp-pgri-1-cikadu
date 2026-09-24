@@ -406,7 +406,7 @@ export const KioskView: React.FC<KioskViewProps> = ({
               {dutyTeacher.nama || 'Petugas Piket Harian, S.Pd'}
             </p>
             <p className="text-[11px] text-slate-500 font-mono">
-              NIP: {dutyTeacher.nip || '-'}
+              NIP/NUPTK: {dutyTeacher.nip || '-'}
             </p>
           </div>
           <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1.5 pt-1">

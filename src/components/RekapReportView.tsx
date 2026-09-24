@@ -396,7 +396,7 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
                   {config.namaKepsek}
                 </p>
                 <p className="text-[11px] text-slate-600 font-mono">
-                  NIP: {config.nipKepsek || '-'}
+                  NIP/NUPTK: {config.nipKepsek || '-'}
                 </p>
               </div>
 
@@ -410,7 +410,7 @@ export const RekapReportView: React.FC<RekapReportViewProps> = ({
                   {dutyTeacher.nama || 'Petugas Piket, S.Pd'}
                 </p>
                 <p className="text-[11px] text-slate-600 font-mono">
-                  NIP: {dutyTeacher.nip || '-'}
+                  NIP/NUPTK: {dutyTeacher.nip || '-'}
                 </p>
               </div>
             </div>

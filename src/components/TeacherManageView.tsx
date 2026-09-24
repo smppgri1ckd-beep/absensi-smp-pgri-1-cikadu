@@ -383,7 +383,7 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
   };
 
   const handleCopyCredentials = (t: TeacherUser) => {
-    const text = `*AKUN LOGIN E-PRESENSI SISWA*\nSekolah: ${config.namaSekolah}\nNama Guru: ${t.nama}\nNIP: ${t.nip}\nMata Pelajaran: ${t.mapel}\nUsername: ${t.username}\nPassword: ${t.password}\n\nSilakan login melalui tombol Login Guru di website presensi sekolah.`;
+    const text = `*AKUN LOGIN E-PRESENSI SISWA*\nSekolah: ${config.namaSekolah}\nNama Guru: ${t.nama}\nNIP/NUPTK: ${t.nip}\nMata Pelajaran: ${t.mapel}\nUsername: ${t.username}\nPassword: ${t.password}\n\nSilakan login melalui tombol Login Guru di website presensi sekolah.`;
     navigator.clipboard.writeText(text);
     setCopiedId(t.id);
     setTimeout(() => setCopiedId(null), 2500);
@@ -739,7 +739,7 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
                             </div>
 
                             <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                              NIP: {t.nip || '-'}
+                              NIP/NUPTK: {t.nip || '-'}
                             </p>
 
                             {/* Mobile-only compact badges (Mapel, Wali Kelas, Status & Quick Username) */}

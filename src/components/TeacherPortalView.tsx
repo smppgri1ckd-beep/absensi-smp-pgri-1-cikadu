@@ -1183,7 +1183,7 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                 {teacher.nama}
               </h1>
               <p className="text-xs sm:text-sm text-blue-200/90 font-medium">
-                NIP: {teacher.nip || '-'} • Mapel: <span className="font-bold text-white">{teacher.mapel}</span>
+                NIP/NUPTK: {teacher.nip || '-'} • Mapel: <span className="font-bold text-white">{teacher.mapel}</span>
               </p>
             </div>
           </div>
@@ -1900,7 +1900,7 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
                 {dutyTeacherToday.nama}
               </p>
               <p className="text-xs text-slate-500 font-mono mt-0.5">
-                NIP: {dutyTeacherToday.nip}
+                NIP/NUPTK: {dutyTeacherToday.nip}
               </p>
             </div>
 

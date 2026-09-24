@@ -122,7 +122,7 @@ export async function exportTeacherDailyPDF(
   doc.setFont('helvetica', 'bold');
   doc.text("Guru Pengajar:", margin + 3, y + 4);
   doc.setFont('helvetica', 'normal');
-  doc.text(`${teacher.nama} (NIP: ${teacher.nip || '-'})`, margin + 25, y + 4);
+  doc.text(`${teacher.nama} (NIP/NUPTK: ${teacher.nip || '-'})`, margin + 25, y + 4);
 
   doc.setFont('helvetica', 'bold');
   doc.text("Hari / Tanggal:", margin + 110, y + 4);
@@ -305,13 +305,13 @@ export async function exportTeacherDailyPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
 
   // Teacher Name
   doc.setFont('helvetica', 'bold');
   doc.text(teacher.nama, rightSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
 
   const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
   const safeMapel = displayMapel.replace(/[^a-zA-Z0-9]/g, '_');
@@ -397,7 +397,7 @@ export async function exportTeacherJournalBookPDF(
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
-  doc.text(`Kelas / Rombel: ${className === 'ALL' ? 'Semua Kelas' : `Kelas ${className}`}   |   Mata Pelajaran: ${mapel}   |   Guru Pengajar: ${teacher.nama} (NIP: ${teacher.nip || '-'})`, textCenterX, y, { align: 'center' });
+  doc.text(`Kelas / Rombel: ${className === 'ALL' ? 'Semua Kelas' : `Kelas ${className}`}   |   Mata Pelajaran: ${mapel}   |   Guru Pengajar: ${teacher.nama} (NIP/NUPTK: ${teacher.nip || '-'})`, textCenterX, y, { align: 'center' });
   y += 4;
 
   // Build filter label badge in PDF header
@@ -573,12 +573,12 @@ export async function exportTeacherJournalBookPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.text(teacher.nama, rightSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
 
   const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
   const safeMapel = mapel.replace(/[^a-zA-Z0-9]/g, '_');
@@ -823,12 +823,12 @@ export async function exportTeacherAttendanceMatrixPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.text(teacher.nama, rightSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${teacher.nip || '-'}`, rightSignX, y + 3.5, { align: 'center' });
 
   const cleanSchool = config.namaSekolah.replace(/\s+/g, '_');
   const safeMapel = mapel.replace(/[^a-zA-Z0-9]/g, '_');
@@ -1069,7 +1069,7 @@ export async function exportAdminSupervisionReportPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
 
   // Supervisor Name & NIP
   doc.setFont('helvetica', 'bold');
@@ -1183,7 +1183,7 @@ export async function exportAssistedTeachingSlipPDF(
   const infoRows = [
     ['Hari, Tanggal', `: ${journal.tanggal}`],
     ['Jam Pelajaran / Waktu', `: ${journal.jamPelajaran || 'Sesi Terjadwal'}`],
-    ['Guru Mata Pelajaran', `: ${teacher.nama} (NIP: ${teacher.nip || '-'})`],
+    ['Guru Mata Pelajaran', `: ${teacher.nama} (NIP/NUPTK: ${teacher.nip || '-'})`],
     ['Mata Pelajaran', `: ${journal.mapel}`],
     ['Kelas / Pertemuan Ke', `: Kelas ${journal.kelas} (Pertemuan Ke-${journal.pertemuanKe || 1})`],
     ['Alasan / Status Asistensi', `: ${reason}`],
@@ -1256,7 +1256,7 @@ export async function exportAssistedTeachingSlipPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 4, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 4, { align: 'center' });
 
   // Officer Name
   doc.setFont('helvetica', 'bold');
@@ -1355,7 +1355,7 @@ export async function exportAcademicSupervisionRubricPDF(
   const valX = margin + 45;
 
   const identRows = [
-    ['Nama Guru', `: ${teacher.nama} (NIP: ${teacher.nip || '-'})`],
+    ['Nama Guru', `: ${teacher.nama} (NIP/NUPTK: ${teacher.nip || '-'})`],
     ['Mata Pelajaran / Kelas', `: ${journal.mapel} / Kelas ${journal.kelas}`],
     ['Hari, Tanggal / Waktu', `: ${journal.tanggal} (${journal.jamPelajaran || 'Sesi KBM'})`],
     ['Materi Pokok Pembelajaran', `: ${journal.materiPokok}`],
@@ -1500,13 +1500,13 @@ export async function exportAcademicSupervisionRubricPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(teacher.nama, col1X, nameY, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${teacher.nip || '-'}`, col1X, nameY + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${teacher.nip || '-'}`, col1X, nameY + 3.5, { align: 'center' });
 
   // Headmaster Name
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, col2X, nameY, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, col2X, nameY + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, col2X, nameY + 3.5, { align: 'center' });
 
   // Supervisor Name
   doc.setFont('helvetica', 'bold');
@@ -1597,7 +1597,7 @@ export async function exportCurriculumTargetProgressPDF(
   const cols = [
     { header: 'NO', width: 8, align: 'center' },
     { header: 'NAMA GURU PENGAMPU', width: 48, align: 'left' },
-    { header: 'NIP / ID', width: 25, align: 'center' },
+    { header: 'NIP/NUPTK', width: 25, align: 'center' },
     { header: 'MATA PELAJARAN', width: 35, align: 'left' },
     { header: 'KELAS DIAJAR', width: 32, align: 'left' },
     { header: 'SESI KBM TERLAKSANA', width: 28, align: 'center' },
@@ -1705,7 +1705,7 @@ export async function exportCurriculumTargetProgressPDF(
   doc.setFont('helvetica', 'bold');
   doc.text(config.namaKepsek, leftSignX, y, { align: 'center' });
   doc.setFont('helvetica', 'normal');
-  doc.text(`NIP: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
+  doc.text(`NIP/NUPTK: ${config.nipKepsek || '-'}`, leftSignX, y + 3.5, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.text("Tim Pengembang Kurikulum", rightSignX, y, { align: 'center' });
