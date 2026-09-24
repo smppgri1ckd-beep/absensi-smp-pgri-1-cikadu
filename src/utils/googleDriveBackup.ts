@@ -9,7 +9,18 @@ import {
   FullBackupPayload,
   BackupHistoryItem,
 } from '../types';
-import appletConfig from '../../firebase-applet-config.json';
+import defaultFirebaseConfig from '../firebase-config-default';
+
+let appletConfig: any = defaultFirebaseConfig;
+try {
+  // @ts-ignore
+  const imported = await import('../../firebase-applet-config.json');
+  if (imported && (imported.default || imported.apiKey)) {
+    appletConfig = imported.default || imported;
+  }
+} catch {
+  appletConfig = defaultFirebaseConfig;
+}
 
 declare global {
   interface Window {
