@@ -220,6 +220,9 @@ export default function App() {
           list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
           setStudents(list);
           setSyncStatus('online');
+        } else {
+          setStudents([]);
+          setSyncStatus('online');
         }
       },
       (err) => {
@@ -338,6 +341,9 @@ export default function App() {
           });
           list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
           setTeachers(list);
+          setSyncStatus('online');
+        } else {
+          setTeachers([]);
           setSyncStatus('online');
         }
       },
@@ -1381,6 +1387,36 @@ export default function App() {
     return { attendanceCount: deletedAttCount, journalCount: deletedJrnCount };
   };
 
+  // Maintenance: Total Factory Reset (Wipe students, teachers, attendance, journals)
+  const handleResetEntireDatabase = async (): Promise<void> => {
+    if (!ensureNetworkOnline()) {
+      return;
+    }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    // 1. Delete all students
+    if (students.length > 0) {
+      await handleBatchDeleteStudents(students.map((s) => s.nisn));
+    }
+    // 2. Delete all teachers
+    if (teachers.length > 0) {
+      await handleBatchDeleteTeachers(teachers.map((t) => t.id));
+    }
+    // 3. Delete all attendance
+    if (attendance.length > 0) {
+      await handleBatchDeleteAttendance(attendance.map((a) => a.id));
+    }
+    // 4. Delete all journals
+    if (teachingJournals.length > 0) {
+      await handleBatchDeleteJournals(teachingJournals.map((j) => j.id));
+    }
+    setStudents([]);
+    setTeachers([]);
+    setAttendance([]);
+    setTeachingJournals([]);
+  };
+
   // Restore Complete Backup Archive into Database
   const handleRestoreAllData = async (payload: any) => {
     if (!ensureNetworkOnline()) {
@@ -1737,6 +1773,7 @@ export default function App() {
               onPurgeAllAttendance={handlePurgeAllAttendance}
               onPurgeAllJournals={handlePurgeAllJournals}
               onPurgeAllInputData={handlePurgeAllInputData}
+              onResetEntireDatabase={handleResetEntireDatabase}
               onNavigateToBackup={() => setCurrentView('backupData')}
               onShowNotice={showNotice}
               onShowConfirm={showConfirm}

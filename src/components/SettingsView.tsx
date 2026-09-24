@@ -51,6 +51,7 @@ interface SettingsViewProps {
     purgeAttendance?: boolean;
     purgeJournals?: boolean;
   }) => Promise<{ attendanceCount: number; journalCount: number }>;
+  onResetEntireDatabase?: () => Promise<void>;
   onNavigateToBackup?: () => void;
   onShowNotice: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
   onShowConfirm: (title: string, message: string, onConfirm: () => void) => void;
@@ -69,6 +70,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onPurgeAllAttendance,
   onPurgeAllJournals,
   onPurgeAllInputData,
+  onResetEntireDatabase,
   onNavigateToBackup,
   onShowNotice,
   onShowConfirm,
@@ -1361,7 +1363,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
 
               {/* Master Full Purge Trigger Button */}
-              <div className="pt-2">
+              <div className="pt-2 space-y-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -1375,11 +1377,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   <Trash2 className="w-4 h-4" />
                   <span>5. HAPUS SEMUA DATA INPUTAN (TOTAL RESET)</span>
                 </button>
+
+                {onResetEntireDatabase && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onShowConfirm(
+                        'KOSONGKAN SELURUH DATABASE (0 DATA)',
+                        'PERINGATAN KRUSIAL: Ini akan menghapus SEMUA Data Siswa, Data Guru, Presensi, dan Jurnal di Firebase Firestore untuk memulai aplikasi dari 0 (kosong total). Tindakan ini tidak dapat dibatalkan. Lanjutkan?',
+                        async () => {
+                          await onResetEntireDatabase();
+                          onShowNotice('Database Bersih 100%', 'Seluruh data di Firestore dan web telah dikosongkan total dari awal.', 'success');
+                        }
+                      );
+                    }}
+                    className="w-full py-2 bg-slate-100 hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-slate-300 hover:border-rose-300 font-extrabold rounded-xl transition flex items-center justify-center gap-2 cursor-pointer text-xs"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>6. Kosongkan Seluruh Siswa, Guru &amp; Log (Mulai Dari 0)</span>
+                  </button>
+                )}
               </div>
             </div>
 
             <p className="text-[10px] text-slate-400 italic text-center pt-1">
-              Master data siswa &amp; guru tetap 100% aman dan tidak terpengaruh pembersihan log transaksi.
+              Gunakan opsi di atas untuk mengosongkan log semester atau membersihkan total database saat memulai tahun ajaran baru.
             </p>
           </div>
         </div>

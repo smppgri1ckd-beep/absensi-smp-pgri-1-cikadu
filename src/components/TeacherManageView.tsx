@@ -31,6 +31,7 @@ import { TeacherUser, SchoolConfig } from '../types';
 import { OFFICIAL_SUBJECTS } from '../constants/subjects';
 import { TeacherImportModal } from './TeacherImportModal';
 import { downloadTeacherExcelTemplate, downloadTeacherCsvTemplate } from '../utils/export';
+import { processImageFile } from '../utils/qr';
 
 interface TeacherManageViewProps {
   teachers: TeacherUser[];
@@ -106,20 +107,17 @@ export const TeacherManageView: React.FC<TeacherManageViewProps> = ({
     setFormMapel(updated.join(', '));
   };
 
-  // File upload reader for teacher photo
-  const handleFotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // File upload reader for teacher photo with auto compression
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024) {
-      onShowNotice('Ukuran Terlalu Besar', 'Maksimal ukuran foto adalah 3MB.', 'warning');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFormFotoUrl(reader.result as string);
+    try {
+      const b64 = await processImageFile(file, 280, 0.85);
+      setFormFotoUrl(b64);
       onShowNotice('Foto Berhasil Dipilih', 'Foto profil guru siap disimpan.', 'info');
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      onShowNotice('Gagal Memproses Foto', 'Terjadi kesalahan saat memproses gambar.', 'warning');
+    }
   };
 
   // Reset password form state
