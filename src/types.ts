@@ -4,6 +4,8 @@ export type AttendanceSession = 'Pagi' | 'Siang';
 
 export type AttendanceCategory = 'APEL' | 'KELAS';
 
+export type SyncStatus = 'online' | 'syncing' | 'offline';
+
 export type AttendanceStatus =
   | 'Hadir Tepat Waktu'
   | 'Terlambat'

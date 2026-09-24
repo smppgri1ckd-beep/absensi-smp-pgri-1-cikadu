@@ -14,8 +14,11 @@ import {
   GraduationCap,
   PanelLeftClose,
   PanelLeft,
+  Cloud,
+  CloudOff,
+  RefreshCw,
 } from 'lucide-react';
-import { SchoolConfig, UserSession, AttendanceSession, ViewType } from '../types';
+import { SchoolConfig, UserSession, AttendanceSession, ViewType, SyncStatus } from '../types';
 
 interface NavbarProps {
   config: SchoolConfig;
@@ -34,6 +37,8 @@ interface NavbarProps {
   onEditProfile?: () => void;
   isSidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  syncStatus?: SyncStatus;
+  onTriggerManualSync?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -53,6 +58,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onEditProfile,
   isSidebarCollapsed = false,
   onToggleSidebar,
+  syncStatus = 'online',
+  onTriggerManualSync,
 }) => {
   const avatarUrl =
     userSession.role === 'GURU'
@@ -138,6 +145,52 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* Right Controls */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Real-Time Sync Status Indicator */}
+        <button
+          type="button"
+          onClick={onTriggerManualSync}
+          title={
+            syncStatus === 'online'
+              ? 'Status Database: Terhubung ke Cloud Firestore & Sinkron Realtime (Klik untuk segarkan)'
+              : syncStatus === 'syncing'
+              ? 'Status Database: Sedang menyinkronkan data dengan Cloud Firestore...'
+              : 'Status Database: Mode Lokal / Offline. Data tersimpan di memori lokal perangkat (Klik untuk coba hubungkan kembali)'
+          }
+          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-extrabold border transition shadow-2xs active:scale-95 cursor-pointer ${
+            syncStatus === 'online'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80 hover:bg-emerald-100'
+              : syncStatus === 'syncing'
+              ? 'bg-blue-50 text-blue-800 border-blue-200/80 hover:bg-blue-100'
+              : 'bg-amber-50 text-amber-800 border-amber-200/80 hover:bg-amber-100'
+          }`}
+        >
+          {syncStatus === 'online' && (
+            <>
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <Cloud className="w-3.5 h-3.5 text-emerald-600 hidden md:inline" />
+              <span className="hidden sm:inline">Online</span>
+            </>
+          )}
+
+          {syncStatus === 'syncing' && (
+            <>
+              <RefreshCw className="w-3 h-3 text-blue-600 animate-spin" />
+              <span className="hidden sm:inline">Syncing</span>
+            </>
+          )}
+
+          {syncStatus === 'offline' && (
+            <>
+              <span className="h-2 w-2 rounded-full bg-amber-500"></span>
+              <CloudOff className="w-3.5 h-3.5 text-amber-600 hidden md:inline" />
+              <span className="hidden sm:inline">Offline</span>
+            </>
+          )}
+        </button>
+
         {/* Active Session Badge & Switch */}
         <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2 sm:px-2.5 py-1 rounded-xl">
           <span className="text-[10px] font-medium text-slate-500 hidden md:inline">

@@ -9,6 +9,7 @@ import {
   TeacherUser,
   TeachingJournal,
   AdminProfile,
+  SyncStatus,
 } from './types';
 import {
   db,
@@ -25,6 +26,7 @@ import {
   signOut,
   onAuthStateChanged,
   cleanFirestoreData,
+  testFirebaseConnection,
   DEFAULT_SCHOOL_CONFIG,
   SEED_STUDENTS,
   SEED_TEACHERS,
@@ -94,6 +96,7 @@ export default function App() {
     return localStorage.getItem('epresensi_sidebar_collapsed') === 'true';
   });
   const [teacherActiveTab, setTeacherActiveTab] = useState<TeacherTabType>('DASHBOARD');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() => (typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'online'));
 
   const handleToggleSidebar = () => {
     setIsSidebarCollapsed((prev) => {
@@ -230,15 +233,30 @@ export default function App() {
     const unsubStudents = onSnapshot(
       collection(firestore, 'siswa'),
       (snapshot) => {
-        const list: Student[] = [];
-        snapshot.forEach((d) => {
-          const data = d.data() as Student;
-          data.nisn = String(data.nisn || d.id).trim();
-          list.push(data);
-        });
-        list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-        setStudents(list);
-        localStorage.setItem('epresensi_local_students', JSON.stringify(list));
+        if (!snapshot.empty && snapshot.docs.length > 0) {
+          const list: Student[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data() as Student;
+            data.nisn = String(data.nisn || d.id).trim();
+            list.push(data);
+          });
+          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+          setStudents(list);
+          localStorage.setItem('epresensi_local_students', JSON.stringify(list));
+        } else {
+          // If remote is empty, auto-push existing local students to Firestore so data is not lost
+          const saved = localStorage.getItem('epresensi_local_students');
+          if (saved) {
+            try {
+              const localList: Student[] = JSON.parse(saved);
+              if (localList.length > 0) {
+                const batch = writeBatch(firestore);
+                localList.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), cleanFirestoreData(s)));
+                batch.commit().catch(() => {});
+              }
+            } catch {}
+          }
+        }
       },
       (err) => console.warn('Firestore students error:', err)
     );
@@ -247,22 +265,24 @@ export default function App() {
     const unsubAttendance = onSnapshot(
       collection(firestore, 'presensi'),
       (snapshot) => {
-        const uniqueMap = new Map<string, AttendanceRecord>();
-        snapshot.forEach((d) => {
-          const item = d.data() as AttendanceRecord;
-          item.id = d.id;
-          item.nisn = String(item.nisn || '').trim();
-          const dedupeKey = item.kategori === 'KELAS'
-            ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
-            : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
-          if (!uniqueMap.has(dedupeKey)) {
-            uniqueMap.set(dedupeKey, item);
-          }
-        });
-        const list = Array.from(uniqueMap.values());
-        list.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
-        setAttendance(list);
-        localStorage.setItem('epresensi_local_attendance', JSON.stringify(list));
+        if (!snapshot.empty && snapshot.docs.length > 0) {
+          const uniqueMap = new Map<string, AttendanceRecord>();
+          snapshot.forEach((d) => {
+            const item = d.data() as AttendanceRecord;
+            item.id = d.id;
+            item.nisn = String(item.nisn || '').trim();
+            const dedupeKey = item.kategori === 'KELAS'
+              ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
+              : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
+            if (!uniqueMap.has(dedupeKey)) {
+              uniqueMap.set(dedupeKey, item);
+            }
+          });
+          const list = Array.from(uniqueMap.values());
+          list.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
+          setAttendance(list);
+          localStorage.setItem('epresensi_local_attendance', JSON.stringify(list));
+        }
       },
       (err) => console.warn('Firestore attendance error:', err)
     );
@@ -271,15 +291,17 @@ export default function App() {
     const unsubJournals = onSnapshot(
       collection(firestore, 'jurnal_mengajar'),
       (snapshot) => {
-        const list: TeachingJournal[] = [];
-        snapshot.forEach((d) => {
-          const item = d.data() as TeachingJournal;
-          item.id = d.id;
-          list.push(item);
-        });
-        list.sort((a, b) => (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || '')));
-        setTeachingJournals(list);
-        localStorage.setItem('epresensi_local_journals', JSON.stringify(list));
+        if (!snapshot.empty && snapshot.docs.length > 0) {
+          const list: TeachingJournal[] = [];
+          snapshot.forEach((d) => {
+            const item = d.data() as TeachingJournal;
+            item.id = d.id;
+            list.push(item);
+          });
+          list.sort((a, b) => (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || '')));
+          setTeachingJournals(list);
+          localStorage.setItem('epresensi_local_journals', JSON.stringify(list));
+        }
       },
       (err) => console.warn('Firestore journals error:', err)
     );
@@ -332,15 +354,30 @@ export default function App() {
     const unsubTeachers = onSnapshot(
       collection(firestore, 'guru_users'),
       (snapshot) => {
-        const list: TeacherUser[] = [];
-        snapshot.forEach((d) => {
-          const data = d.data() as TeacherUser;
-          data.id = d.id;
-          list.push(data);
-        });
-        list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-        setTeachers(list);
-        localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
+        if (!snapshot.empty && snapshot.docs.length > 0) {
+          const list: TeacherUser[] = [];
+          snapshot.forEach((d) => {
+            const data = d.data() as TeacherUser;
+            data.id = d.id;
+            list.push(data);
+          });
+          list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+          setTeachers(list);
+          localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
+        } else {
+          // If remote is empty, auto-push existing local teachers to Firestore so data is preserved
+          const saved = localStorage.getItem('epresensi_local_teachers');
+          if (saved) {
+            try {
+              const localList: TeacherUser[] = JSON.parse(saved);
+              if (localList.length > 0) {
+                const batch = writeBatch(firestore);
+                localList.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
+                batch.commit().catch(() => {});
+              }
+            } catch {}
+          }
+        }
       },
       (err) => console.warn('Firestore teachers error:', err)
     );
@@ -383,49 +420,55 @@ export default function App() {
       try {
         // 1. Fetch Students
         const studentSnap = await getDocs(collection(firestore, 'siswa'));
-        const listStudents: Student[] = [];
-        studentSnap.forEach((d) => {
-          const data = d.data() as Student;
-          data.nisn = String(data.nisn || d.id).trim();
-          listStudents.push(data);
-        });
-        listStudents.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-        setStudents(listStudents);
-        localStorage.setItem('epresensi_local_students', JSON.stringify(listStudents));
+        if (!studentSnap.empty && studentSnap.docs.length > 0) {
+          const listStudents: Student[] = [];
+          studentSnap.forEach((d) => {
+            const data = d.data() as Student;
+            data.nisn = String(data.nisn || d.id).trim();
+            listStudents.push(data);
+          });
+          listStudents.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
+          setStudents(listStudents);
+          localStorage.setItem('epresensi_local_students', JSON.stringify(listStudents));
+        }
 
         // 2. Fetch Attendance
         const attSnap = await getDocs(collection(firestore, 'presensi'));
-        const uniqueMap = new Map<string, AttendanceRecord>();
-        attSnap.forEach((d) => {
-          const item = d.data() as AttendanceRecord;
-          item.id = d.id;
-          item.nisn = String(item.nisn || '').trim();
-          const dedupeKey =
-            item.kategori === 'KELAS'
-              ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
-              : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
-          if (!uniqueMap.has(dedupeKey)) {
-            uniqueMap.set(dedupeKey, item);
-          }
-        });
-        const listAtt = Array.from(uniqueMap.values());
-        listAtt.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
-        setAttendance(listAtt);
-        localStorage.setItem('epresensi_local_attendance', JSON.stringify(listAtt));
+        if (!attSnap.empty && attSnap.docs.length > 0) {
+          const uniqueMap = new Map<string, AttendanceRecord>();
+          attSnap.forEach((d) => {
+            const item = d.data() as AttendanceRecord;
+            item.id = d.id;
+            item.nisn = String(item.nisn || '').trim();
+            const dedupeKey =
+              item.kategori === 'KELAS'
+                ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
+                : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
+            if (!uniqueMap.has(dedupeKey)) {
+              uniqueMap.set(dedupeKey, item);
+            }
+          });
+          const listAtt = Array.from(uniqueMap.values());
+          listAtt.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
+          setAttendance(listAtt);
+          localStorage.setItem('epresensi_local_attendance', JSON.stringify(listAtt));
+        }
 
         // 3. Fetch Teaching Journals
         const journalSnap = await getDocs(collection(firestore, 'jurnal_mengajar'));
-        const listJournals: TeachingJournal[] = [];
-        journalSnap.forEach((d) => {
-          const item = d.data() as TeachingJournal;
-          item.id = d.id;
-          listJournals.push(item);
-        });
-        listJournals.sort((a, b) =>
-          (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || ''))
-        );
-        setTeachingJournals(listJournals);
-        localStorage.setItem('epresensi_local_journals', JSON.stringify(listJournals));
+        if (!journalSnap.empty && journalSnap.docs.length > 0) {
+          const listJournals: TeachingJournal[] = [];
+          journalSnap.forEach((d) => {
+            const item = d.data() as TeachingJournal;
+            item.id = d.id;
+            listJournals.push(item);
+          });
+          listJournals.sort((a, b) =>
+            (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || ''))
+          );
+          setTeachingJournals(listJournals);
+          localStorage.setItem('epresensi_local_journals', JSON.stringify(listJournals));
+        }
 
         // 4. Fetch School Config
         const configSnap = await getDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'));
@@ -453,15 +496,17 @@ export default function App() {
 
         // 5. Fetch Teachers
         const teacherSnap = await getDocs(collection(firestore, 'guru_users'));
-        const listTeachers: TeacherUser[] = [];
-        teacherSnap.forEach((d) => {
-          const data = d.data() as TeacherUser;
-          data.id = d.id;
-          listTeachers.push(data);
-        });
-        listTeachers.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-        setTeachers(listTeachers);
-        localStorage.setItem('epresensi_local_teachers', JSON.stringify(listTeachers));
+        if (!teacherSnap.empty && teacherSnap.docs.length > 0) {
+          const listTeachers: TeacherUser[] = [];
+          teacherSnap.forEach((d) => {
+            const data = d.data() as TeacherUser;
+            data.id = d.id;
+            listTeachers.push(data);
+          });
+          listTeachers.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
+          setTeachers(listTeachers);
+          localStorage.setItem('epresensi_local_teachers', JSON.stringify(listTeachers));
+        }
 
         // 6. Fetch HEB Calendar
         const hebSnap = await getDoc(doc(firestore, 'kalender_heb', 'active'));
@@ -470,8 +515,12 @@ export default function App() {
           setKalenderHebData(data);
           localStorage.setItem('epresensi_local_heb', JSON.stringify(data));
         }
+        setSyncStatus('online');
       } catch (err) {
         // Silently keep local state without interrupting user flow
+        if (!navigator.onLine) {
+          setSyncStatus('offline');
+        }
       } finally {
         isPolling = false;
       }
@@ -483,21 +532,60 @@ export default function App() {
     // Immediate sync on window focus, visibility change, and online network recovery
     const handleSyncTrigger = () => {
       if (document.visibilityState === 'visible' || navigator.onLine) {
+        setSyncStatus('syncing');
         syncFirebaseData();
       }
     };
 
+    const handleOfflineEvent = () => {
+      setSyncStatus('offline');
+    };
+
     window.addEventListener('focus', handleSyncTrigger);
     window.addEventListener('online', handleSyncTrigger);
+    window.addEventListener('offline', handleOfflineEvent);
     document.addEventListener('visibilitychange', handleSyncTrigger);
 
     return () => {
       clearInterval(pollingInterval);
       window.removeEventListener('focus', handleSyncTrigger);
       window.removeEventListener('online', handleSyncTrigger);
+      window.removeEventListener('offline', handleOfflineEvent);
       document.removeEventListener('visibilitychange', handleSyncTrigger);
     };
   }, []);
+
+  // Manual Trigger to refresh and sync with Cloud Firestore
+  const handleManualSync = async () => {
+    if (!navigator.onLine) {
+      setSyncStatus('offline');
+      showNotice('Mode Offline', 'Perangkat sedang tidak terhubung ke jaringan internet. Data tetap aman di memori lokal.', 'info');
+      return;
+    }
+
+    setSyncStatus('syncing');
+    try {
+      const conn = await testFirebaseConnection();
+      if (conn.isFirestoreOnline) {
+        setSyncStatus('online');
+        showNotice(
+          'Database Cloud Tersinkron',
+          `Koneksi ke Firestore (${conn.projectId}) aktif dan seluruh data telah sinkron realtime.`,
+          'success'
+        );
+      } else {
+        setSyncStatus('offline');
+        showNotice(
+          'Koneksi Cloud Terbatas',
+          'Database cloud sedang tidak merespons atau berjalan offline. Data Anda tetap tersimpan aman di perangkat lokal.',
+          'warning'
+        );
+      }
+    } catch {
+      setSyncStatus('offline');
+      showNotice('Mode Offline', 'Tidak dapat terhubung ke cloud. Data tersimpan di memori perangkat lokal.', 'info');
+    }
+  };
 
   // Format Indonesian strings
   const timeFormatted = `${String(currentTime.getHours()).padStart(2, '0')}:${String(
@@ -1497,6 +1585,8 @@ export default function App() {
         onInstallPwa={handleInstallPwa}
         isSidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={handleToggleSidebar}
+        syncStatus={syncStatus}
+        onTriggerManualSync={handleManualSync}
       />
 
       {/* Main Body */}
