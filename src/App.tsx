@@ -766,6 +766,18 @@ export default function App() {
     showNotice('Sesi Berakhir', 'Anda telah kembali ke Mode Kiosk Publik.', 'info');
   };
 
+  // Helper to ensure Firestore async writes never block or hang the UI
+  const syncWithFirestoreTimeout = async (promise: Promise<any>, timeoutMs = 2000): Promise<void> => {
+    try {
+      await Promise.race([
+        promise,
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    } catch (err) {
+      console.warn('Firestore async sync note/error:', err);
+    }
+  };
+
   // Teacher Management Actions (Admin)
   const handleAddTeacher = async (teacher: TeacherUser) => {
     const cleaned = cleanFirestoreData(teacher);
@@ -778,11 +790,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned);
-      } catch (err) {
-        console.warn('Firestore add teacher error:', err);
-      }
+      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned));
     }
   };
 
@@ -808,11 +816,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned);
-      } catch (err) {
-        console.warn('Firestore update teacher error:', err);
-      }
+      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned));
     }
   };
 
@@ -849,11 +853,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
-        await deleteDoc(doc(firestore, 'guru_users', id));
-      } catch (err) {
-        console.warn('Firestore delete teacher error:', err);
-      }
+      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'guru_users', id)));
     }
   };
 
@@ -998,7 +998,7 @@ export default function App() {
     // Step 4: Persist to Firestore
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const chunkSize = 400;
         for (let i = 0; i < dedupedBatch.length; i += chunkSize) {
           const chunk = dedupedBatch.slice(i, i + chunkSize);
@@ -1006,9 +1006,7 @@ export default function App() {
           chunk.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
           await batch.commit();
         }
-      } catch (err) {
-        console.warn('Firestore batch import teachers error:', err);
-      }
+      })(), 2500);
     }
 
     // Step 5: Informative notification feedback
@@ -1044,7 +1042,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const chunkSize = 400;
         for (let i = 0; i < ids.length; i += chunkSize) {
           const chunk = ids.slice(i, i + chunkSize);
@@ -1052,9 +1050,7 @@ export default function App() {
           chunk.forEach((id) => batch.delete(doc(firestore, 'guru_users', id)));
           await batch.commit();
         }
-      } catch (err) {
-        console.warn('Firestore batch delete teachers error:', err);
-      }
+      })(), 2500);
     }
   };
 
@@ -1069,11 +1065,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'presensi', cleaned.id), cleaned);
-      } catch (err) {
-        console.warn('Failed to sync attendance to Firestore:', err);
-      }
+      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'presensi', cleaned.id), cleaned), 1800);
     }
     return true;
   };
@@ -1091,14 +1083,12 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         if (oldNisn && oldNisn !== cleaned.nisn) {
           await deleteDoc(doc(firestore, 'siswa', oldNisn));
         }
         await setDoc(doc(firestore, 'siswa', cleaned.nisn), cleaned);
-      } catch (err) {
-        console.warn('Firestore student sync error:', err);
-      }
+      })(), 2000);
     }
   };
 
@@ -1110,11 +1100,7 @@ export default function App() {
     });
     const firestore = db;
     if (firestore) {
-      try {
-        await deleteDoc(doc(firestore, 'siswa', nisn));
-      } catch (err) {
-        console.warn('Firestore delete student error:', err);
-      }
+      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'siswa', nisn)), 1800);
     }
   };
 
@@ -1127,7 +1113,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const chunkSize = 200;
         for (let i = 0; i < nisns.length; i += chunkSize) {
           const chunk = nisns.slice(i, i + chunkSize);
@@ -1135,9 +1121,7 @@ export default function App() {
           chunk.forEach((nisn) => batch.delete(doc(firestore, 'siswa', nisn)));
           await batch.commit();
         }
-      } catch (err) {
-        console.warn('Firestore batch delete students error:', err);
-      }
+      })(), 2500);
     }
   };
 
@@ -1155,7 +1139,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const chunkSize = 200;
         for (let i = 0; i < cleanedList.length; i += chunkSize) {
           const chunk = cleanedList.slice(i, i + chunkSize);
@@ -1163,9 +1147,7 @@ export default function App() {
           chunk.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), s));
           await batch.commit();
         }
-      } catch (err) {
-        console.warn('Firestore batch import students error:', err);
-      }
+      })(), 3000);
     }
   };
 
@@ -1181,11 +1163,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'presensi', cleaned.id), cleaned);
-      } catch (err) {
-        console.warn('Firestore attendance sync error:', err);
-      }
+      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'presensi', cleaned.id), cleaned), 1800);
     }
   };
 
@@ -1197,11 +1175,7 @@ export default function App() {
     });
     const firestore = db;
     if (firestore) {
-      try {
-        await deleteDoc(doc(firestore, 'presensi', id));
-      } catch (err) {
-        console.warn('Firestore delete attendance error:', err);
-      }
+      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'presensi', id)), 1800);
     }
   };
 
@@ -1214,7 +1188,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const chunkSize = 200;
         for (let i = 0; i < ids.length; i += chunkSize) {
           const chunk = ids.slice(i, i + chunkSize);
@@ -1222,9 +1196,7 @@ export default function App() {
           chunk.forEach((id) => batch.delete(doc(firestore, 'presensi', id)));
           await batch.commit();
         }
-      } catch (err) {
-        console.warn('Firestore batch delete attendance error:', err);
-      }
+      })(), 2500);
     }
   };
 
@@ -1250,7 +1222,7 @@ export default function App() {
     // 2. Commit journal + batch attendance records to Firestore
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const batch = writeBatch(firestore);
         const journalRef = doc(firestore, 'jurnal_mengajar', cleanedJournal.id);
         batch.set(journalRef, cleanedJournal, { merge: true });
@@ -1262,9 +1234,7 @@ export default function App() {
           });
         }
         await batch.commit();
-      } catch (err) {
-        console.warn('Firestore save teaching journal error:', err);
-      }
+      })(), 2500);
     }
 
     // 3. Update local attendance state if attendanceBatch provided
@@ -1289,11 +1259,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
-        await deleteDoc(doc(firestore, 'jurnal_mengajar', journalId));
-      } catch (err) {
-        console.warn('Firestore delete teaching journal error:', err);
-      }
+      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'jurnal_mengajar', journalId)), 1800);
     }
   };
 
@@ -1304,11 +1270,7 @@ export default function App() {
     localStorage.setItem('epresensi_local_config', JSON.stringify(cleaned));
     const firestore = db;
     if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned);
-      } catch (err) {
-        console.warn('Firestore config update error:', err);
-      }
+      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned), 2000);
     }
   };
 
@@ -1318,11 +1280,7 @@ export default function App() {
     localStorage.setItem('epresensi_local_heb', JSON.stringify(cleaned));
     const firestore = db;
     if (firestore) {
-      try {
-        await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned });
-      } catch (err) {
-        console.warn('Firestore HEB update error:', err);
-      }
+      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned }), 2000);
     }
   };
 
@@ -1356,7 +1314,7 @@ export default function App() {
 
     const firestore = db;
     if (firestore) {
-      try {
+      await syncWithFirestoreTimeout((async () => {
         const chunkSize = 200;
         for (let i = 0; i < ids.length; i += chunkSize) {
           const chunk = ids.slice(i, i + chunkSize);
@@ -1364,9 +1322,7 @@ export default function App() {
           chunk.forEach((id) => batch.delete(doc(firestore, 'jurnal_mengajar', id)));
           await batch.commit();
         }
-      } catch (err) {
-        console.warn('Firestore batch delete journals error:', err);
-      }
+      })(), 2500);
     }
   };
 
