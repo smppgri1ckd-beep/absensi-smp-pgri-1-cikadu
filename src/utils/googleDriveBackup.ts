@@ -442,7 +442,7 @@ export async function requestGoogleDriveAccessToken(
         customClientId ||
         (typeof localStorage !== 'undefined' ? localStorage.getItem('epresensi_custom_client_id') : null) ||
         (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
-        appletConfig.oAuthClientId ||
+        (appletConfig as any).oAuthClientId ||
         '696200452974-2a9nmf0t83ppi38pl7guqaoajmb3gcko.apps.googleusercontent.com';
 
       let tokenReceived = false;

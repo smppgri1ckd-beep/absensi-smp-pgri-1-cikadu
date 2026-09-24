@@ -87,7 +87,7 @@ export async function testFirebaseConnection(): Promise<FirebaseConnectionStatus
   console.log('📌 Auth Domain:', status.authDomain);
   console.log('🔑 API Key Status:', status.hasApiKey ? 'Loaded (Valid length)' : 'MISSING / EMPTY');
   console.log('📦 App Initialized:', status.initialized ? 'YES' : 'NO');
-  console.log('🔒 OAuth Client ID:', appletConfig.oAuthClientId || 'Default configured');
+  console.log('🔒 OAuth Client ID:', (appletConfig as any).oAuthClientId || 'Default configured');
 
   if (!db) {
     console.warn('⚠️ Firestore instance is null. Running in offline fallback mode.');

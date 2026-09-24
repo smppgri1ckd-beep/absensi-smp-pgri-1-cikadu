@@ -1244,9 +1244,17 @@ export default function App() {
     }
     const cleaned = cleanFirestoreData(newConfig);
     const firestore = db;
-    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+    if (!firestore) {
+      setConfig(cleaned);
+      return;
+    }
 
-    await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned);
+    const savePromise = setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Waktu penyimpanan habis (Timeout). Periksa koneksi internet Anda.')), 7000)
+    );
+
+    await Promise.race([savePromise, timeoutPromise]);
     setConfig(cleaned);
   };
 
@@ -1256,9 +1264,17 @@ export default function App() {
     }
     const cleaned = cleanFirestoreData(data);
     const firestore = db;
-    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+    if (!firestore) {
+      setKalenderHebData(cleaned);
+      return;
+    }
 
-    await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned });
+    const savePromise = setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Waktu penyimpanan habis (Timeout). Periksa koneksi internet Anda.')), 7000)
+    );
+
+    await Promise.race([savePromise, timeoutPromise]);
     setKalenderHebData(cleaned);
   };
 
