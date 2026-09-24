@@ -11,17 +11,6 @@ import {
 } from '../types';
 import defaultFirebaseConfig from '../firebase-config-default';
 
-let appletConfig: any = defaultFirebaseConfig;
-try {
-  // @ts-ignore
-  const imported = await import('../../firebase-applet-config.json');
-  if (imported && (imported.default || imported.apiKey)) {
-    appletConfig = imported.default || imported;
-  }
-} catch {
-  appletConfig = defaultFirebaseConfig;
-}
-
 declare global {
   interface Window {
     google?: any;
@@ -453,7 +442,7 @@ export async function requestGoogleDriveAccessToken(
         customClientId ||
         (typeof localStorage !== 'undefined' ? localStorage.getItem('epresensi_custom_client_id') : null) ||
         (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
-        (appletConfig as any).oAuthClientId ||
+        defaultFirebaseConfig.oAuthClientId ||
         '696200452974-2a9nmf0t83ppi38pl7guqaoajmb3gcko.apps.googleusercontent.com';
 
       let tokenReceived = false;

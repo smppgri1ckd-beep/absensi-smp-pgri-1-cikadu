@@ -25,26 +25,13 @@ import {
 import { Student, AttendanceRecord, SchoolConfig, TeacherUser } from './types';
 import defaultFirebaseConfig from './firebase-config-default';
 
-// Safe dynamic lookup for applet config if present
-let appletConfig: any = defaultFirebaseConfig;
-try {
-  // @ts-ignore
-  const imported = await import('../firebase-applet-config.json');
-  if (imported && (imported.default || imported.apiKey)) {
-    appletConfig = imported.default || imported;
-  }
-} catch {
-  // Fallback to default config
-  appletConfig = defaultFirebaseConfig;
-}
-
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || appletConfig.apiKey || defaultFirebaseConfig.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || defaultFirebaseConfig.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || defaultFirebaseConfig.projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || defaultFirebaseConfig.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || defaultFirebaseConfig.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || appletConfig.appId || defaultFirebaseConfig.appId,
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || defaultFirebaseConfig.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || defaultFirebaseConfig.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || defaultFirebaseConfig.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || defaultFirebaseConfig.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || defaultFirebaseConfig.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || defaultFirebaseConfig.appId,
 };
 
 let app: FirebaseApp | null = null;
@@ -100,7 +87,7 @@ export async function testFirebaseConnection(): Promise<FirebaseConnectionStatus
   console.log('📌 Auth Domain:', status.authDomain);
   console.log('🔑 API Key Status:', status.hasApiKey ? 'Loaded (Valid length)' : 'MISSING / EMPTY');
   console.log('📦 App Initialized:', status.initialized ? 'YES' : 'NO');
-  console.log('🔒 OAuth Client ID:', (appletConfig as any).oAuthClientId || 'Default configured');
+  console.log('🔒 OAuth Client ID:', defaultFirebaseConfig.oAuthClientId || 'Default configured');
 
   if (!db) {
     console.warn('⚠️ Firestore instance is null. Running in offline fallback mode.');
