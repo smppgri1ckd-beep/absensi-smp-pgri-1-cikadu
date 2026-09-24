@@ -186,6 +186,13 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
   const [quickStudentStatuses, setQuickStudentStatuses] = useState<Record<string, 'HADIR' | 'SAKIT' | 'IZIN' | 'ALPA'>>({});
   const [isSubmittingQuickForm, setIsSubmittingQuickForm] = useState(false);
 
+  // Keep assistanceTeacherId synced with available teachers
+  React.useEffect(() => {
+    if ((!assistanceTeacherId || !teachers.some((t) => t.id === assistanceTeacherId)) && teachers.length > 0) {
+      setAssistanceTeacherId(teachers[0].id);
+    }
+  }, [teachers, assistanceTeacherId]);
+
   // Extract classes list
   const classes = useMemo(() => {
     return Array.from(new Set(students.map((s) => s.kelas))).filter(Boolean).sort();
@@ -500,28 +507,35 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
       return;
     }
 
+    if (quickClassStudents.length === 0) {
+      onShowNotice('Data Siswa Kosong', `Tidak ditemukan siswa terdaftar di Kelas ${quickClass || '-'}. Pastikan data siswa telah diinput.`, 'warning');
+      return;
+    }
+
     setIsSubmittingQuickForm(true);
 
     try {
       const now = new Date();
       const journalId = `jrn-${Date.now()}`;
-      const auditNote = `[Diinput via Mode Asistensi: ${assistanceReason} oleh ${assistanceOfficerName} pada ${selectedDate} ${timeString}]`;
+      const auditNote = `[Diinput via Mode Asistensi: ${assistanceReason || 'Bantuan Piket'} oleh ${assistanceOfficerName || 'Petugas'} pada ${selectedDate} ${timeString || ''}]`;
       const combinedRefleksi = quickRefleksi.trim()
         ? `${quickRefleksi.trim()}\n${auditNote}`
         : auditNote;
+
+      const subjectName = quickSubject || currentAssistanceTeacher.mapel || OFFICIAL_SUBJECTS[0];
 
       const newJournal: TeachingJournal = {
         id: journalId,
         guruId: currentAssistanceTeacher.id,
         guruNama: currentAssistanceTeacher.nama,
-        guruNip: currentAssistanceTeacher.nip,
+        guruNip: currentAssistanceTeacher.nip || '-',
         kelas: quickClass,
-        mapel: quickSubject || currentAssistanceTeacher.mapel,
+        mapel: subjectName,
         tanggal: selectedDate,
         pertemuanKe: computedQuickPertemuan,
-        jamPelajaran: quickJam,
+        jamPelajaran: quickJam || JAM_PELAJARAN_OPTIONS[0],
         materiPokok: quickMateri.trim(),
-        kegiatanPembelajaran: quickKegiatan.trim() || undefined,
+        kegiatanPembelajaran: quickKegiatan.trim() || '',
         catatanRefleksi: combinedRefleksi,
         totalSiswa: quickAttendanceCounts.total,
         hadir: quickAttendanceCounts.hadir,
@@ -533,7 +547,7 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
           ? Math.round((quickAttendanceCounts.hadir / quickAttendanceCounts.total) * 100)
           : 100,
         supervisionStatus: 'VERIFIED',
-        verifiedBy: `Asistensi: ${assistanceOfficerName}`,
+        verifiedBy: `Asistensi: ${assistanceOfficerName || 'Petugas Piket'}`,
         verifiedAt: now.toISOString(),
         createdAt: now.toISOString(),
       };
@@ -548,10 +562,10 @@ export const AdminKbmSupervisionView: React.FC<AdminKbmSupervisionViewProps> = (
           nisn: s.nisn,
           nama: s.nama,
           kelas: quickClass,
-          sesi: 'Pagi',
+          sesi: activeSession || 'Pagi',
           status: st === 'HADIR' ? 'Hadir Tepat Waktu' : st === 'SAKIT' ? 'Sakit' : st === 'IZIN' ? 'Izin' : 'Alpa',
           kategori: 'KELAS',
-          mapel: quickSubject || currentAssistanceTeacher.mapel,
+          mapel: subjectName,
           pertemuanKe: computedQuickPertemuan,
           materiPokok: quickMateri.trim(),
           guruId: currentAssistanceTeacher.id,

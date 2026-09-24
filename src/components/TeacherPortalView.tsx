@@ -151,6 +151,16 @@ export const TeacherPortalView: React.FC<TeacherPortalViewProps> = ({
   const [catatanRefleksi, setCatatanRefleksi] = useState<string>('');
   const [isSavingJournal, setIsSavingJournal] = useState(false);
 
+  // Sync state when teacher prop changes (e.g. in Assistance Mode)
+  useEffect(() => {
+    if (teacherMapelList.length > 0) {
+      setSelectedMapel(teacherMapelList[0] || OFFICIAL_SUBJECTS[0]);
+    }
+    if (initialClass) {
+      setSelectedClass(initialClass);
+    }
+  }, [teacher.id, teacher.mapel, initialClass]);
+
   // Modal Input Izin / Sakit
   const [showIzinModal, setShowIzinModal] = useState(isIzinView);
   const [targetStudent, setTargetStudent] = useState<Student | null>(null);
