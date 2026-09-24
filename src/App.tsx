@@ -56,35 +56,12 @@ import { NoticeModal, ConfirmModal } from './components/NoticeModal';
 import { NotificationBanner } from './components/NotificationBanner';
 
 export default function App() {
-  const [students, setStudents] = useState<Student[]>(() => {
-    const saved = localStorage.getItem('epresensi_local_students');
-    return saved ? JSON.parse(saved) : SEED_STUDENTS;
-  });
-
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    const saved = localStorage.getItem('epresensi_local_attendance');
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [config, setConfig] = useState<SchoolConfig>(() => {
-    const saved = localStorage.getItem('epresensi_local_config');
-    return saved ? JSON.parse(saved) : DEFAULT_SCHOOL_CONFIG;
-  });
-
-  const [kalenderHebData, setKalenderHebData] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('epresensi_local_heb');
-    return saved ? JSON.parse(saved) : {};
-  });
-
-  const [teachers, setTeachers] = useState<TeacherUser[]>(() => {
-    const saved = localStorage.getItem('epresensi_local_teachers');
-    return saved ? JSON.parse(saved) : SEED_TEACHERS;
-  });
-
-  const [teachingJournals, setTeachingJournals] = useState<TeachingJournal[]>(() => {
-    const saved = localStorage.getItem('epresensi_local_journals');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [students, setStudents] = useState<Student[]>(SEED_STUDENTS);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [config, setConfig] = useState<SchoolConfig>(DEFAULT_SCHOOL_CONFIG);
+  const [kalenderHebData, setKalenderHebData] = useState<Record<string, boolean>>({});
+  const [teachers, setTeachers] = useState<TeacherUser[]>(SEED_TEACHERS);
+  const [teachingJournals, setTeachingJournals] = useState<TeachingJournal[]>([]);
 
   const [userSession, setUserSession] = useState<UserSession>(() => {
     const saved = localStorage.getItem('epresensi_user_session');
@@ -242,68 +219,60 @@ export default function App() {
           });
           list.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
           setStudents(list);
-          localStorage.setItem('epresensi_local_students', JSON.stringify(list));
-        } else {
-          // If remote is empty, auto-push existing local students to Firestore so data is not lost
-          const saved = localStorage.getItem('epresensi_local_students');
-          if (saved) {
-            try {
-              const localList: Student[] = JSON.parse(saved);
-              if (localList.length > 0) {
-                const batch = writeBatch(firestore);
-                localList.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), cleanFirestoreData(s)));
-                batch.commit().catch(() => {});
-              }
-            } catch {}
-          }
+          setSyncStatus('online');
         }
       },
-      (err) => console.warn('Firestore students error:', err)
+      (err) => {
+        console.warn('Firestore students error:', err);
+        if (!navigator.onLine) setSyncStatus('offline');
+      }
     );
 
     // 2. Listen to Attendance (presensi)
     const unsubAttendance = onSnapshot(
       collection(firestore, 'presensi'),
       (snapshot) => {
-        if (!snapshot.empty && snapshot.docs.length > 0) {
-          const uniqueMap = new Map<string, AttendanceRecord>();
-          snapshot.forEach((d) => {
-            const item = d.data() as AttendanceRecord;
-            item.id = d.id;
-            item.nisn = String(item.nisn || '').trim();
-            const dedupeKey = item.kategori === 'KELAS'
-              ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
-              : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
-            if (!uniqueMap.has(dedupeKey)) {
-              uniqueMap.set(dedupeKey, item);
-            }
-          });
-          const list = Array.from(uniqueMap.values());
-          list.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
-          setAttendance(list);
-          localStorage.setItem('epresensi_local_attendance', JSON.stringify(list));
-        }
+        const uniqueMap = new Map<string, AttendanceRecord>();
+        snapshot.forEach((d) => {
+          const item = d.data() as AttendanceRecord;
+          item.id = d.id;
+          item.nisn = String(item.nisn || '').trim();
+          const dedupeKey = item.kategori === 'KELAS'
+            ? `${item.nisn}_${item.tanggal}_KELAS_${item.mapel || 'mapel'}_${item.pertemuanKe || 1}`
+            : `${item.nisn}_${item.tanggal}_APEL_${item.sesi}`;
+          if (!uniqueMap.has(dedupeKey)) {
+            uniqueMap.set(dedupeKey, item);
+          }
+        });
+        const list = Array.from(uniqueMap.values());
+        list.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
+        setAttendance(list);
+        setSyncStatus('online');
       },
-      (err) => console.warn('Firestore attendance error:', err)
+      (err) => {
+        console.warn('Firestore attendance error:', err);
+        if (!navigator.onLine) setSyncStatus('offline');
+      }
     );
 
     // 3. Listen to Teaching Journals (jurnal_mengajar)
     const unsubJournals = onSnapshot(
       collection(firestore, 'jurnal_mengajar'),
       (snapshot) => {
-        if (!snapshot.empty && snapshot.docs.length > 0) {
-          const list: TeachingJournal[] = [];
-          snapshot.forEach((d) => {
-            const item = d.data() as TeachingJournal;
-            item.id = d.id;
-            list.push(item);
-          });
-          list.sort((a, b) => (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || '')));
-          setTeachingJournals(list);
-          localStorage.setItem('epresensi_local_journals', JSON.stringify(list));
-        }
+        const list: TeachingJournal[] = [];
+        snapshot.forEach((d) => {
+          const item = d.data() as TeachingJournal;
+          item.id = d.id;
+          list.push(item);
+        });
+        list.sort((a, b) => (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || '')));
+        setTeachingJournals(list);
+        setSyncStatus('online');
       },
-      (err) => console.warn('Firestore journals error:', err)
+      (err) => {
+        console.warn('Firestore journals error:', err);
+        if (!navigator.onLine) setSyncStatus('offline');
+      }
     );
 
     // 4. Listen to School Config
@@ -329,12 +298,15 @@ export default function App() {
             },
           };
           setConfig(merged);
-          localStorage.setItem('epresensi_local_config', JSON.stringify(merged));
+          setSyncStatus('online');
         } else {
           setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleanFirestoreData(DEFAULT_SCHOOL_CONFIG)).catch(() => {});
         }
       },
-      (err) => console.warn('Firestore config error:', err)
+      (err) => {
+        console.warn('Firestore config error:', err);
+        if (!navigator.onLine) setSyncStatus('offline');
+      }
     );
 
     // 5. Listen to HEB Calendar
@@ -344,10 +316,13 @@ export default function App() {
         if (d.exists()) {
           const data = d.data()?.kalenderData || {};
           setKalenderHebData(data);
-          localStorage.setItem('epresensi_local_heb', JSON.stringify(data));
+          setSyncStatus('online');
         }
       },
-      (err) => console.warn('Firestore HEB error:', err)
+      (err) => {
+        console.warn('Firestore HEB error:', err);
+        if (!navigator.onLine) setSyncStatus('offline');
+      }
     );
 
     // 6. Listen to Teachers (guru_users)
@@ -363,23 +338,13 @@ export default function App() {
           });
           list.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
           setTeachers(list);
-          localStorage.setItem('epresensi_local_teachers', JSON.stringify(list));
-        } else {
-          // If remote is empty, auto-push existing local teachers to Firestore so data is preserved
-          const saved = localStorage.getItem('epresensi_local_teachers');
-          if (saved) {
-            try {
-              const localList: TeacherUser[] = JSON.parse(saved);
-              if (localList.length > 0) {
-                const batch = writeBatch(firestore);
-                localList.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
-                batch.commit().catch(() => {});
-              }
-            } catch {}
-          }
+          setSyncStatus('online');
         }
       },
-      (err) => console.warn('Firestore teachers error:', err)
+      (err) => {
+        console.warn('Firestore teachers error:', err);
+        if (!navigator.onLine) setSyncStatus('offline');
+      }
     );
 
     // 7. Auth listener
@@ -429,7 +394,6 @@ export default function App() {
           });
           listStudents.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
           setStudents(listStudents);
-          localStorage.setItem('epresensi_local_students', JSON.stringify(listStudents));
         }
 
         // 2. Fetch Attendance
@@ -451,7 +415,6 @@ export default function App() {
           const listAtt = Array.from(uniqueMap.values());
           listAtt.sort((a, b) => (b.tanggal + b.waktu).localeCompare(a.tanggal + a.waktu));
           setAttendance(listAtt);
-          localStorage.setItem('epresensi_local_attendance', JSON.stringify(listAtt));
         }
 
         // 3. Fetch Teaching Journals
@@ -467,7 +430,6 @@ export default function App() {
             (b.tanggal + (b.createdAt || '')).localeCompare(a.tanggal + (a.createdAt || ''))
           );
           setTeachingJournals(listJournals);
-          localStorage.setItem('epresensi_local_journals', JSON.stringify(listJournals));
         }
 
         // 4. Fetch School Config
@@ -491,7 +453,6 @@ export default function App() {
             },
           };
           setConfig(merged);
-          localStorage.setItem('epresensi_local_config', JSON.stringify(merged));
         }
 
         // 5. Fetch Teachers
@@ -505,7 +466,6 @@ export default function App() {
           });
           listTeachers.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
           setTeachers(listTeachers);
-          localStorage.setItem('epresensi_local_teachers', JSON.stringify(listTeachers));
         }
 
         // 6. Fetch HEB Calendar
@@ -513,11 +473,9 @@ export default function App() {
         if (hebSnap.exists()) {
           const data = hebSnap.data()?.kalenderData || {};
           setKalenderHebData(data);
-          localStorage.setItem('epresensi_local_heb', JSON.stringify(data));
         }
         setSyncStatus('online');
       } catch (err) {
-        // Silently keep local state without interrupting user flow
         if (!navigator.onLine) {
           setSyncStatus('offline');
         }
@@ -529,37 +487,59 @@ export default function App() {
     // Periodic polling every 10 seconds as backup
     const pollingInterval = setInterval(syncFirebaseData, 10000);
 
-    // Immediate sync on window focus, visibility change, and online network recovery
-    const handleSyncTrigger = () => {
-      if (document.visibilityState === 'visible' || navigator.onLine) {
-        setSyncStatus('syncing');
-        syncFirebaseData();
-      }
+    // Online/Offline and network state events
+    const handleOnlineEvent = () => {
+      setSyncStatus('syncing');
+      showNotice('Jaringan Terhubung', 'Koneksi internet aktif. Terhubung langsung ke Firebase Firestore.', 'success');
+      syncFirebaseData();
     };
 
     const handleOfflineEvent = () => {
       setSyncStatus('offline');
+      showNotice(
+        'Jaringan Terputus',
+        'Anda tidak terhubung ke jaringan. Pastikan perangkat Anda terhubung ke internet untuk menyimpan dan membaca data Firebase.',
+        'warning'
+      );
+    };
+
+    const handleSyncTrigger = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine) {
+        syncFirebaseData();
+      }
     };
 
     window.addEventListener('focus', handleSyncTrigger);
-    window.addEventListener('online', handleSyncTrigger);
+    window.addEventListener('online', handleOnlineEvent);
     window.addEventListener('offline', handleOfflineEvent);
     document.addEventListener('visibilitychange', handleSyncTrigger);
 
     return () => {
       clearInterval(pollingInterval);
       window.removeEventListener('focus', handleSyncTrigger);
-      window.removeEventListener('online', handleSyncTrigger);
+      window.removeEventListener('online', handleOnlineEvent);
       window.removeEventListener('offline', handleOfflineEvent);
       document.removeEventListener('visibilitychange', handleSyncTrigger);
     };
   }, []);
 
-  // Manual Trigger to refresh and sync with Cloud Firestore
-  const handleManualSync = async () => {
+  // Proactive Network Verification Helper
+  const ensureNetworkOnline = (): boolean => {
     if (!navigator.onLine) {
       setSyncStatus('offline');
-      showNotice('Mode Offline', 'Perangkat sedang tidak terhubung ke jaringan internet. Data tetap aman di memori lokal.', 'info');
+      showNotice(
+        'Tidak Terhubung ke Jaringan',
+        'Anda sedang tidak terhubung ke jaringan internet. Pastikan jaringan internet Anda aktif untuk menyimpan data ke Firebase.',
+        'warning'
+      );
+      return false;
+    }
+    return true;
+  };
+
+  // Manual Trigger to refresh and sync with Cloud Firestore
+  const handleManualSync = async () => {
+    if (!ensureNetworkOnline()) {
       return;
     }
 
@@ -577,13 +557,13 @@ export default function App() {
         setSyncStatus('offline');
         showNotice(
           'Koneksi Cloud Terbatas',
-          'Database cloud sedang tidak merespons atau berjalan offline. Data Anda tetap tersimpan aman di perangkat lokal.',
+          'Database cloud sedang tidak merespons. Pastikan jaringan Anda terhubung ke internet.',
           'warning'
         );
       }
     } catch {
       setSyncStatus('offline');
-      showNotice('Mode Offline', 'Tidak dapat terhubung ke cloud. Data tersimpan di memori perangkat lokal.', 'info');
+      showNotice('Gagal Terhubung', 'Tidak dapat terhubung ke cloud Firebase. Periksa koneksi internet Anda.', 'warning');
     }
   };
 
@@ -780,26 +760,33 @@ export default function App() {
 
   // Teacher Management Actions (Admin)
   const handleAddTeacher = async (teacher: TeacherUser) => {
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
+    }
     const cleaned = cleanFirestoreData(teacher);
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned);
     setTeachers((prev) => {
-      const updated = [...prev, cleaned];
+      const updated = [...prev.filter((t) => t.id !== cleaned.id), cleaned];
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
       return updated;
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned));
-    }
   };
 
   const handleUpdateTeacher = async (teacher: TeacherUser) => {
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
+    }
     const cleaned = cleanFirestoreData(teacher);
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned);
     setTeachers((prev) => {
       const updated = prev.map((t) => (t.id === cleaned.id ? cleaned : t));
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id'));
-      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
       return updated;
     });
 
@@ -812,11 +799,6 @@ export default function App() {
       };
       setUserSession(updatedSession);
       localStorage.setItem('epresensi_user_session', JSON.stringify(updatedSession));
-    }
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'guru_users', cleaned.id), cleaned));
     }
   };
 
@@ -845,19 +827,21 @@ export default function App() {
   };
 
   const handleDeleteTeacher = async (id: string) => {
-    setTeachers((prev) => {
-      const updated = prev.filter((t) => t.id !== id);
-      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
-      return updated;
-    });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'guru_users', id)));
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
     }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await deleteDoc(doc(firestore, 'guru_users', id));
+    setTeachers((prev) => prev.filter((t) => t.id !== id));
   };
 
   const handleBatchImportTeachers = async (newTeachers: TeacherUser[]) => {
+    if (!ensureNetworkOnline()) {
+      return;
+    }
+
     if (!newTeachers || newTeachers.length === 0) {
       showNotice(
         'Format Tidak Sesuai',
@@ -937,6 +921,19 @@ export default function App() {
     let updatedCount = 0;
     let insertedCount = 0;
 
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    // Step 4: Persist directly to Firestore
+    const chunkSize = 400;
+    for (let i = 0; i < dedupedBatch.length; i += chunkSize) {
+      const chunk = dedupedBatch.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      chunk.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
+      await batch.commit();
+    }
+
+    // Step 5: Update state
     setTeachers((prev) => {
       const map = new Map<string, TeacherUser>();
       prev.forEach((t) => map.set(t.id, t));
@@ -991,31 +988,16 @@ export default function App() {
 
       const updated = Array.from(map.values());
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
       return updated;
     });
 
-    // Step 4: Persist to Firestore
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const chunkSize = 400;
-        for (let i = 0; i < dedupedBatch.length; i += chunkSize) {
-          const chunk = dedupedBatch.slice(i, i + chunkSize);
-          const batch = writeBatch(firestore);
-          chunk.forEach((t) => batch.set(doc(firestore, 'guru_users', t.id), cleanFirestoreData(t)));
-          await batch.commit();
-        }
-      })(), 2500);
-    }
-
-    // Step 5: Informative notification feedback
+    // Step 6: Informative notification feedback
     const totalDuplicates = duplicateNipsFound.length + duplicateUsernamesFound.length + internalDuplicates.length;
     const hasWarnings = totalDuplicates > 0 || invalidRows.length > 0;
 
     if (hasWarnings) {
       const summaryMsg = [
-        `Berhasil memproses ${insertedCount} guru baru dan memperbarui ${updatedCount} akun terdaftar.`,
+        `Berhasil memproses ${insertedCount} guru baru dan memperbarui ${updatedCount} akun terdaftar di Firebase.`,
         totalDuplicates > 0 ? `⚠️ Ditemukan ${totalDuplicates} data NIP/Username yang terdaftar sebelumnya atau terduplikasi.` : '',
         invalidRows.length > 0 ? `⚠️ ${invalidRows.length} baris dilewati karena format tidak lengkap.` : '',
       ]
@@ -1026,266 +1008,259 @@ export default function App() {
     } else {
       showNotice(
         'Impor Data Guru Berhasil',
-        `Sebanyak ${insertedCount} data guru baru berhasil diverifikasi dan disimpan ke sistem.`,
+        `Sebanyak ${insertedCount} data guru baru berhasil diverifikasi dan disimpan langsung ke database Firebase.`,
         'success'
       );
     }
   };
 
   const handleBatchDeleteTeachers = async (ids: string[]) => {
+    if (!ensureNetworkOnline()) {
+      return;
+    }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    const chunkSize = 400;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      chunk.forEach((id) => batch.delete(doc(firestore, 'guru_users', id)));
+      await batch.commit();
+    }
+
     setTeachers((prev) => {
       const idSet = new Set(ids);
-      const updated = prev.filter((t) => !idSet.has(t.id));
-      localStorage.setItem('epresensi_local_teachers', JSON.stringify(updated));
-      return updated;
+      return prev.filter((t) => !idSet.has(t.id));
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const chunkSize = 400;
-        for (let i = 0; i < ids.length; i += chunkSize) {
-          const chunk = ids.slice(i, i + chunkSize);
-          const batch = writeBatch(firestore);
-          chunk.forEach((id) => batch.delete(doc(firestore, 'guru_users', id)));
-          await batch.commit();
-        }
-      })(), 2500);
-    }
   };
 
   // Record Attendance Action
   const handleRecordAttendance = async (record: AttendanceRecord): Promise<boolean> => {
+    if (!ensureNetworkOnline()) {
+      return false;
+    }
     const cleaned = cleanFirestoreData(record);
-    // Update local state first for instantaneous feedback
+    const firestore = db;
+    if (firestore) {
+      await setDoc(doc(firestore, 'presensi', cleaned.id), cleaned);
+    }
+
     setAttendance((prev) => {
       const filtered = prev.filter((a) => a.id !== cleaned.id);
       return [cleaned, ...filtered];
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'presensi', cleaned.id), cleaned), 1800);
-    }
     return true;
   };
 
   // Student CRUD Actions
   const handleAddOrUpdateStudent = async (student: Student, oldNisn?: string) => {
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
+    }
     const cleaned = cleanFirestoreData(student);
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    if (oldNisn && oldNisn !== cleaned.nisn) {
+      await deleteDoc(doc(firestore, 'siswa', oldNisn));
+    }
+    await setDoc(doc(firestore, 'siswa', cleaned.nisn), cleaned);
+
     setStudents((prev) => {
       const filtered = prev.filter((s) => s.nisn !== (oldNisn || cleaned.nisn));
       const updated = [...filtered, cleaned];
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
       return updated;
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        if (oldNisn && oldNisn !== cleaned.nisn) {
-          await deleteDoc(doc(firestore, 'siswa', oldNisn));
-        }
-        await setDoc(doc(firestore, 'siswa', cleaned.nisn), cleaned);
-      })(), 2000);
-    }
   };
 
   const handleDeleteStudent = async (nisn: string) => {
-    setStudents((prev) => {
-      const updated = prev.filter((s) => s.nisn !== nisn);
-      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
-      return updated;
-    });
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'siswa', nisn)), 1800);
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
     }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await deleteDoc(doc(firestore, 'siswa', nisn));
+    setStudents((prev) => prev.filter((s) => s.nisn !== nisn));
   };
 
   const handleBatchDeleteStudents = async (nisns: string[]) => {
-    setStudents((prev) => {
-      const updated = prev.filter((s) => !nisns.includes(s.nisn));
-      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
-      return updated;
-    });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const chunkSize = 200;
-        for (let i = 0; i < nisns.length; i += chunkSize) {
-          const chunk = nisns.slice(i, i + chunkSize);
-          const batch = writeBatch(firestore);
-          chunk.forEach((nisn) => batch.delete(doc(firestore, 'siswa', nisn)));
-          await batch.commit();
-        }
-      })(), 2500);
+    if (!ensureNetworkOnline()) {
+      return;
     }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    const chunkSize = 200;
+    for (let i = 0; i < nisns.length; i += chunkSize) {
+      const chunk = nisns.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      chunk.forEach((nisn) => batch.delete(doc(firestore, 'siswa', nisn)));
+      await batch.commit();
+    }
+
+    setStudents((prev) => prev.filter((s) => !nisns.includes(s.nisn)));
   };
 
   const handleBatchImportStudents = async (newStudents: Student[]) => {
+    if (!ensureNetworkOnline()) {
+      return;
+    }
     const cleanedList = newStudents.map((s) => cleanFirestoreData(s));
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    const chunkSize = 200;
+    for (let i = 0; i < cleanedList.length; i += chunkSize) {
+      const chunk = cleanedList.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      chunk.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), s));
+      await batch.commit();
+    }
+
     setStudents((prev) => {
       const map = new Map<string, Student>();
       prev.forEach((s) => map.set(s.nisn, s));
       cleanedList.forEach((s) => map.set(s.nisn, s));
       const updated = Array.from(map.values());
       updated.sort((a, b) => a.nama.localeCompare(b.nama, 'id', { sensitivity: 'base' }));
-      localStorage.setItem('epresensi_local_students', JSON.stringify(updated));
       return updated;
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const chunkSize = 200;
-        for (let i = 0; i < cleanedList.length; i += chunkSize) {
-          const chunk = cleanedList.slice(i, i + chunkSize);
-          const batch = writeBatch(firestore);
-          chunk.forEach((s) => batch.set(doc(firestore, 'siswa', s.nisn), s));
-          await batch.commit();
-        }
-      })(), 3000);
-    }
   };
 
   // Attendance CRUD Actions
   const handleAddOrUpdateAttendance = async (record: AttendanceRecord) => {
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
+    }
     const cleaned = cleanFirestoreData(record);
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await setDoc(doc(firestore, 'presensi', cleaned.id), cleaned);
     setAttendance((prev) => {
       const filtered = prev.filter((a) => a.id !== cleaned.id);
-      const updated = [cleaned, ...filtered];
-      localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
-      return updated;
+      return [cleaned, ...filtered];
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'presensi', cleaned.id), cleaned), 1800);
-    }
   };
 
   const handleDeleteAttendance = async (id: string) => {
-    setAttendance((prev) => {
-      const updated = prev.filter((a) => a.id !== id);
-      localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
-      return updated;
-    });
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'presensi', id)), 1800);
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
     }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await deleteDoc(doc(firestore, 'presensi', id));
+    setAttendance((prev) => prev.filter((a) => a.id !== id));
   };
 
   const handleBatchDeleteAttendance = async (ids: string[]) => {
-    setAttendance((prev) => {
-      const updated = prev.filter((a) => !ids.includes(a.id));
-      localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
-      return updated;
-    });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const chunkSize = 200;
-        for (let i = 0; i < ids.length; i += chunkSize) {
-          const chunk = ids.slice(i, i + chunkSize);
-          const batch = writeBatch(firestore);
-          chunk.forEach((id) => batch.delete(doc(firestore, 'presensi', id)));
-          await batch.commit();
-        }
-      })(), 2500);
+    if (!ensureNetworkOnline()) {
+      return;
     }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      chunk.forEach((id) => batch.delete(doc(firestore, 'presensi', id)));
+      await batch.commit();
+    }
+
+    setAttendance((prev) => {
+      const idSet = new Set(ids);
+      return prev.filter((a) => !idSet.has(a.id));
+    });
   };
 
   // Teaching Journal / Data Pembelajaran Actions
   const handleSaveTeachingJournal = async (journal: TeachingJournal, attendanceBatch?: AttendanceRecord[]) => {
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
+    }
     const cleanedJournal = cleanFirestoreData(journal);
     const cleanedBatch = attendanceBatch ? attendanceBatch.map((r) => cleanFirestoreData(r)) : [];
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
 
-    // 1. Update local journal state
+    const batch = writeBatch(firestore);
+    const journalRef = doc(firestore, 'jurnal_mengajar', cleanedJournal.id);
+    batch.set(journalRef, cleanedJournal, { merge: true });
+
+    if (cleanedBatch.length > 0) {
+      cleanedBatch.forEach((rec) => {
+        const recRef = doc(firestore, 'presensi', rec.id);
+        batch.set(recRef, rec, { merge: true });
+      });
+    }
+    await batch.commit();
+
     setTeachingJournals((prev) => {
       const idx = prev.findIndex((j) => j.id === cleanedJournal.id);
-      let updated: TeachingJournal[];
       if (idx >= 0) {
-        updated = [...prev];
+        const updated = [...prev];
         updated[idx] = cleanedJournal;
-      } else {
-        updated = [cleanedJournal, ...prev];
+        return updated;
       }
-      localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
-      return updated;
+      return [cleanedJournal, ...prev];
     });
 
-    // 2. Commit journal + batch attendance records to Firestore
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const batch = writeBatch(firestore);
-        const journalRef = doc(firestore, 'jurnal_mengajar', cleanedJournal.id);
-        batch.set(journalRef, cleanedJournal, { merge: true });
-
-        if (cleanedBatch.length > 0) {
-          cleanedBatch.forEach((rec) => {
-            const recRef = doc(firestore, 'presensi', rec.id);
-            batch.set(recRef, rec, { merge: true });
-          });
-        }
-        await batch.commit();
-      })(), 2500);
-    }
-
-    // 3. Update local attendance state if attendanceBatch provided
     if (cleanedBatch.length > 0) {
       setAttendance((prev) => {
         const map = new Map<string, AttendanceRecord>();
         prev.forEach((r) => map.set(r.id, r));
         cleanedBatch.forEach((r) => map.set(r.id, r));
-        const updated = Array.from(map.values());
-        localStorage.setItem('epresensi_local_attendance', JSON.stringify(updated));
-        return updated;
+        return Array.from(map.values());
       });
     }
   };
 
   const handleDeleteTeachingJournal = async (journalId: string) => {
-    setTeachingJournals((prev) => {
-      const updated = prev.filter((j) => j.id !== journalId);
-      localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
-      return updated;
-    });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(deleteDoc(doc(firestore, 'jurnal_mengajar', journalId)), 1800);
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
     }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await deleteDoc(doc(firestore, 'jurnal_mengajar', journalId));
+    setTeachingJournals((prev) => prev.filter((j) => j.id !== journalId));
   };
 
   // Config and HEB updates
   const handleUpdateConfig = async (newConfig: SchoolConfig) => {
-    const cleaned = cleanFirestoreData(newConfig);
-    setConfig(cleaned);
-    localStorage.setItem('epresensi_local_config', JSON.stringify(cleaned));
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned), 2000);
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
     }
+    const cleaned = cleanFirestoreData(newConfig);
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await setDoc(doc(firestore, 'pengaturan', 'identitas_sekolah'), cleaned);
+    setConfig(cleaned);
   };
 
   const handleUpdateKalenderHeb = async (data: Record<string, boolean>) => {
-    const cleaned = cleanFirestoreData(data);
-    setKalenderHebData(cleaned);
-    localStorage.setItem('epresensi_local_heb', JSON.stringify(cleaned));
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout(setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned }), 2000);
+    if (!ensureNetworkOnline()) {
+      throw new Error('Tidak terhubung ke jaringan internet.');
     }
+    const cleaned = cleanFirestoreData(data);
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    await setDoc(doc(firestore, 'kalender_heb', 'active'), { kalenderData: cleaned });
+    setKalenderHebData(cleaned);
   };
 
   // Maintenance: clean duplicates
   const handleCleanDuplicates = async (): Promise<number> => {
+    if (!ensureNetworkOnline()) {
+      return 0;
+    }
     const seen = new Map<string, string>();
     const dupIds: string[] = [];
 
@@ -1306,24 +1281,24 @@ export default function App() {
 
   // Batch delete teaching journals
   const handleBatchDeleteJournals = async (ids: string[]) => {
+    if (!ensureNetworkOnline()) {
+      return;
+    }
+    const firestore = db;
+    if (!firestore) throw new Error('Firebase Firestore belum terinisialisasi.');
+
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const batch = writeBatch(firestore);
+      chunk.forEach((id) => batch.delete(doc(firestore, 'jurnal_mengajar', id)));
+      await batch.commit();
+    }
+
     setTeachingJournals((prev) => {
       const updated = prev.filter((j) => !ids.includes(j.id));
-      localStorage.setItem('epresensi_local_journals', JSON.stringify(updated));
       return updated;
     });
-
-    const firestore = db;
-    if (firestore) {
-      await syncWithFirestoreTimeout((async () => {
-        const chunkSize = 200;
-        for (let i = 0; i < ids.length; i += chunkSize) {
-          const chunk = ids.slice(i, i + chunkSize);
-          const batch = writeBatch(firestore);
-          chunk.forEach((id) => batch.delete(doc(firestore, 'jurnal_mengajar', id)));
-          await batch.commit();
-        }
-      })(), 2500);
-    }
   };
 
   // Maintenance: purge semester attendance
@@ -1408,6 +1383,9 @@ export default function App() {
 
   // Restore Complete Backup Archive into Database
   const handleRestoreAllData = async (payload: any) => {
+    if (!ensureNetworkOnline()) {
+      return;
+    }
     // 1. Update State
     if (Array.isArray(payload.students)) setStudents(payload.students.map((s: any) => cleanFirestoreData(s)));
     if (Array.isArray(payload.attendance)) setAttendance(payload.attendance.map((a: any) => cleanFirestoreData(a)));
@@ -1416,15 +1394,7 @@ export default function App() {
     if (payload.kalenderHeb) setKalenderHebData(cleanFirestoreData(payload.kalenderHeb));
     if (payload.config && payload.config.namaSekolah) setConfig(cleanFirestoreData(payload.config));
 
-    // 2. Persist to LocalStorage
-    localStorage.setItem('epresensi_local_students', JSON.stringify(payload.students || []));
-    localStorage.setItem('epresensi_local_attendance', JSON.stringify(payload.attendance || []));
-    localStorage.setItem('epresensi_local_journals', JSON.stringify(payload.journals || []));
-    localStorage.setItem('epresensi_local_teachers', JSON.stringify(payload.teachers || []));
-    if (payload.kalenderHeb) localStorage.setItem('epresensi_local_heb', JSON.stringify(payload.kalenderHeb));
-    if (payload.config) localStorage.setItem('epresensi_local_config', JSON.stringify(payload.config));
-
-    // 3. Persist to Firestore if available
+    // 2. Persist to Firestore directly
     const firestore = db;
     if (firestore) {
       try {
@@ -1475,7 +1445,7 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.warn('Firestore restore sync partial fallback:', err);
+        console.warn('Firestore restore sync error:', err);
       }
     }
   };
@@ -1544,6 +1514,23 @@ export default function App() {
         syncStatus={syncStatus}
         onTriggerManualSync={handleManualSync}
       />
+
+      {/* Offline Connectivity Warning Banner */}
+      {syncStatus === 'offline' && (
+        <div className="bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-between gap-3 shadow-xs shrink-0 z-30 animate-in slide-in-from-top duration-200">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-white animate-pulse" />
+            <span>⚠️ Anda sedang tidak terhubung ke jaringan internet. Pastikan koneksi internet Anda aktif untuk menyimpan dan memuat data Firebase secara realtime.</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualSync}
+            className="px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-[11px] font-extrabold transition cursor-pointer shrink-0 shadow-2xs"
+          >
+            Uji &amp; Hubungkan Ulang
+          </button>
+        </div>
+      )}
 
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden">
